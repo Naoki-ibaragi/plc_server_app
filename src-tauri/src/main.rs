@@ -1,16 +1,27 @@
-
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::{
-    Manager,
-    menu::{Menu, MenuItem},
-    tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState},
-};
+// モジュール宣言
+mod types;
+mod state;
+mod config;
+mod plc_commands;
+mod tray;
+
+use tauri::Manager;
 use tauri_plugin_single_instance::init as single_instance;
 
+// モジュールからのインポート
+use config::init_socket;
+use plc_commands::{connect_plc, disconnect_plc};
+use state::init_connection_state;
+
 fn main() {
+    let connection_state = init_connection_state();
+
     tauri::Builder::default()
+        .manage(connection_state)
+        .invoke_handler(tauri::generate_handler![init_socket, connect_plc, disconnect_plc])
         .plugin(single_instance(|app, _args, _cwd| {
             // 既にインスタンスが起動している場合、ウィンドウを表示
             if let Some(window) = app.get_webview_window("main") {
@@ -19,42 +30,8 @@ fn main() {
             }
         }))
         .setup(|app| {
-            // メニューを作成
-            let show = MenuItem::with_id(app, "show", "ウィンドウを表示", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "終了", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &quit])?;
-
-            // トレイアイコンを作成
-            TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
-                .menu(&menu)
-                .on_menu_event(|app, event| match event.id().as_ref() {
-                    "show" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
-                    }
-                    "quit" => {
-                        std::process::exit(0);
-                    }
-                    _ => {}
-                })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        if let Some(app) = tray.app_handle().get_webview_window("main") {
-                            let _ = app.show();
-                            let _ = app.set_focus();
-                        }
-                    }
-                })
-                .build(app)?;
-
+            // トレイアイコンをセットアップ
+            tray::setup_tray_icon(app)?;
             Ok(())
         })
         .on_window_event(|window, event| {
