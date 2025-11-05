@@ -12,7 +12,7 @@ use tauri::Manager;
 use tauri_plugin_single_instance::init as single_instance;
 
 // モジュールからのインポート
-use config::init_socket;
+use config::{init_socket,add_plc};
 use plc_commands::{connect_plc, disconnect_plc};
 use state::init_connection_state;
 
@@ -21,7 +21,7 @@ fn main() {
 
     tauri::Builder::default()
         .manage(connection_state)
-        .invoke_handler(tauri::generate_handler![init_socket, connect_plc, disconnect_plc])
+        .invoke_handler(tauri::generate_handler![init_socket, connect_plc, disconnect_plc, add_plc])
         .plugin(single_instance(|app, _args, _cwd| {
             // 既にインスタンスが起動している場合、ウィンドウを表示
             if let Some(window) = app.get_webview_window("main") {

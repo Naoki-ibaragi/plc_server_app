@@ -1,17 +1,21 @@
 import React, { useState } from "react";
-import { ChevronDown, CheckCircle, XCircle, Wifi, Play, Square, Trash2 } from "lucide-react";
+import { ChevronDown, CheckCircle, XCircle, Wifi, Play, Square, Cog, Trash2 } from "lucide-react";
+import EditPlcDialog from "./EditPlcDialog";
 
 /**
  * 個別のPLCカードコンポーネント
  * @param {Object} props
  * @param {Object} props.plc - PLC情報
+ * @param {Object} props.config - ソケット情報
  * @param {Function} props.onConnect - 接続ハンドラー
  * @param {Function} props.onDisconnect - 切断ハンドラー
  * @param {Function} props.onDelete - 削除ハンドラー
+ * @param {Function} props.onEdit - 編集ハンドラー
  */
-export default function PLCCard({ plc, onConnect, onDisconnect, onDelete }) {
+export default function PLCCard({ plc, config,onConnect, onDisconnect, onDelete, onEdit }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const isConnected = plc.status === "connected";
 
   const handleConnect = async (e) => {
@@ -35,6 +39,50 @@ export default function PLCCard({ plc, onConnect, onDisconnect, onDelete }) {
     }
   };
 
+  const handleEdit = async (e) => {
+    e.stopPropagation();
+    if (isConnected) {
+      alert("接続中のPLC情報は編集できません。先に切断してください。");
+      return;
+    }
+    //編集用のダイアログを表示
+    setIsEditDialogOpen(true);
+  };
+
+  // 接続情報編集処理
+  const handleEditPlc = async (formData) => {
+    try {
+      // Rust側のPLC追加コマンドを呼び出す
+      const newConfig = await invoke("add_plc", {
+        name: formData.name,
+        plcIp: formData.plc_ip,
+        plcPort: parseInt(formData.plc_port),
+        pcIp: formData.pc_ip,
+        pcPort: parseInt(formData.pc_port),
+      });
+
+      // 表示リストに追加
+      setPlcList((prev) => [
+        ...prev,
+        {
+          id: newConfig.id,
+          name: newConfig.name,
+          status: "disconnected",
+          ip: newConfig.plc_ip,
+          port: newConfig.plc_port,
+          lastReceived: "-",
+          data: null,
+        },
+      ]);
+
+      alert("PLCを追加しました");
+    } catch (err) {
+      console.error("Failed to add PLC:", err);
+      alert(`PLC追加に失敗しました: ${err}`);
+      throw err;
+    }
+  };
+
   const handleDelete = async (e) => {
     e.stopPropagation();
     if (isConnected) {
@@ -51,7 +99,7 @@ export default function PLCCard({ plc, onConnect, onDisconnect, onDelete }) {
   };
 
   return (
-    <div className="bg-gray-800 rounded-lg mb-2 overflow-hidden shadow-md">
+    <div className={isExpanded ? "bg-gray-700 rounded-lg mb-2 overflow-hidden shadow-md":"bg-gray-800 rounded-lg mb-2 overflow-hidden shadow-md"}>
       {/* カードヘッダー（常に表示） */}
       <div className="w-full p-4 flex items-center gap-3">
         <button
@@ -102,7 +150,7 @@ export default function PLCCard({ plc, onConnect, onDisconnect, onDelete }) {
           <button
             onClick={handleConnect}
             disabled={isConnecting}
-            className={`flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded-lg transition-colors ${
               isConnecting ? "opacity-50 cursor-not-allowed" : ""
             }`}
           >
@@ -143,16 +191,31 @@ export default function PLCCard({ plc, onConnect, onDisconnect, onDelete }) {
                 <p className="text-gray-500 italic">データなし</p>
               )}
             </div>
+            {/* 情報編集ボタン */}
+            <div className="border-t border-gray-700 pt-4">
+              <button
+                onClick={handleEdit}
+                disabled={isConnected}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-1 rounded-lg transition-colors ${
+                  isConnected
+                    ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                    : "bg-green-700 hover:bg-green-600 text-white"
+                }`}
+              >
+                <Cog size={16} />
+                {isConnected ? "接続中は編集できません" : "このPLC情報を編集"}
+              </button>
+            </div>
 
             {/* 削除ボタン */}
             <div className="border-t border-gray-700 pt-4">
               <button
                 onClick={handleDelete}
                 disabled={isConnected}
-                className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                className={`w-full flex items-center justify-center gap-2 px-4 py-1 rounded-lg transition-colors ${
                   isConnected
                     ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-                    : "bg-red-600 hover:bg-red-700 text-white"
+                    : "bg-red-700 hover:bg-red-600 text-white"
                 }`}
               >
                 <Trash2 size={16} />
@@ -162,6 +225,14 @@ export default function PLCCard({ plc, onConnect, onDisconnect, onDelete }) {
           </div>
         </div>
       )}
+      {/* PLC情報編集ダイアログ */}
+      <EditPlcDialog
+        plc={plc}
+        config={config}
+        isOpen={isEditDialogOpen}
+        onClose={() => setIsEditDialogOpen(false)}
+        onEdit={handleEditPlc}
+      />
     </div>
   );
 }

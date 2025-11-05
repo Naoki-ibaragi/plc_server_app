@@ -36,3 +36,4 @@ pub struct PlcConnection {
     pub pc_port: u16,
     pub is_connected: bool,
 }
+

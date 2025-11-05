@@ -129,6 +129,41 @@ export default function StackCard() {
     }
   };
 
+  // PLC情報編集処理
+  const handleEditPlc = async (formData) => {
+    try {
+      // Rust側のPLC情報編集コマンドを呼び出す
+      const newConfig = await invoke("edit_plc", {
+        name: formData.name,
+        plcIp: formData.plc_ip,
+        plcPort: parseInt(formData.plc_port),
+        pcIp: formData.pc_ip,
+        pcPort: parseInt(formData.pc_port),
+      });
+
+      // 設定リストを更新
+      setPlcConfigs(newConfig);
+
+      // 表示リストを更新
+      setPlcList(newConfig);
+      setPlcList((prev) => prev.filter((p) =>{
+        if (p.id=formData.id){
+          p.name=formData.name;
+          p.plcIp=formData.plc_ip;
+          p.plcPort=formData.plc_port;
+          p.pcIp=formData.pc_ip;
+          p.pcPort=formData.pc_port;
+        }
+      }));
+
+      alert("編集が完了しました");
+    } catch (err) {
+      console.error("Failed to delete PLC:", err);
+      alert(`編集が失敗しました: ${err}`);
+      throw err;
+    }
+  };
+
   // PLC削除処理
   const handleDeletePlc = async (plc) => {
     try {
@@ -225,7 +260,7 @@ export default function StackCard() {
           <h2 className="text-xl font-semibold">登録されているPLC</h2>
           <button
             onClick={() => setIsAddDialogOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-600 text-white rounded-lg transition-colors"
           >
             <Plus size={20} />
             PLC追加
@@ -234,13 +269,15 @@ export default function StackCard() {
 
         <div className="space-y-2">
           {plcList.length > 0 ? (
-            plcList.map((plc) => (
+            plcList.map((plc,index) => (
               <PLCCard
                 key={plc.id}
                 plc={plc}
+                config={plcConfigs[index]}
                 onConnect={handleConnect}
                 onDisconnect={handleDisconnect}
                 onDelete={handleDeletePlc}
+                onEdit={handleEditPlc}
               />
             ))
           ) : (
