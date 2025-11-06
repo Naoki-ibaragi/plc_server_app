@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { X, Plus } from "lucide-react";
 import PLCCard from "./PLCCard";
 import AddPlcDialog from "./AddPlcDialog";
+import { listen } from '@tauri-apps/api/event';
 
 export default function StackCard() {
   const [plcList, setPlcList] = useState([]);
@@ -17,12 +18,11 @@ export default function StackCard() {
     const loadPlcConfig = async () => {
       try {
         const configs = await invoke("init_socket");
-        setPlcConfigs(configs); // 元の設定データを保存
-        // 取得した設定データを表示用のフォーマットに変換
+        setPlcConfigs(configs);
         const formattedData = configs.map((config) => ({
           id: config.id,
           name: config.name,
-          status: "disconnected", // 初期状態は未接続
+          status: "disconnected",
           ip: config.plc_ip,
           port: config.plc_port,
           lastReceived: "-",
@@ -37,10 +37,45 @@ export default function StackCard() {
       }
     };
 
+    // listenハンドラの立上
+    const openListener = async () => {
+      try {
+        const unlisten = await listen('plc-message', (event) => {
+          const { plc_id, message, timestamp } = event.payload;
+          //対象のplc_idのplcListのlastReceivedをmessageで更新
+          setPlcList((prev) =>
+            prev.map((p) =>
+              p.id === plc_id
+                ? { ...p, lastReceived: timestamp, data:message }
+                : p
+            )
+          );
+        });
+        return unlisten; // unlistenを返す
+      } catch (err) {
+        console.error("Failed to setup listener:", err);
+        setError(err);
+        setLoading(false);
+        return null;
+      }
+    }
+
     loadPlcConfig();
+    
+    // クリーンアップ関数を返す
+    let unlistenFn;
+    openListener().then(fn => {
+      unlistenFn = fn;
+    });
+
+    return () => {
+      // コンポーネントのアンマウント時にリスナーを解除
+      if (unlistenFn) {
+        unlistenFn();
+      }
+    };
   }, []);
 
-  // PLC接続処理
   const handleConnect = async (plc) => {
     try {
       // 元の設定データから該当のPLC設定を取得
