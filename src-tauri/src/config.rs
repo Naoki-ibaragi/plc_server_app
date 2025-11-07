@@ -70,7 +70,6 @@ pub fn add_plc(
     plc_ip: String,
     plc_port: u16,
     pc_ip: String,
-    pc_port: u16,
 )->Result<Vec<PlcConfig>,String>{
     //config.jsonをパースしたvecに新規のconfigを追加する
     let config_path = get_config_path()?;
@@ -95,7 +94,6 @@ pub fn add_plc(
             plc_ip:plc_ip,
             plc_port:plc_port,
             pc_ip:pc_ip,
-            pc_port:pc_port
         });
 
     //jsonに書き込み
@@ -110,4 +108,46 @@ pub fn add_plc(
 
     Ok(config.plcs)
 
+}
+
+/// PLCの削除を実施
+#[command]
+pub fn delete_plc(
+    plc_id: u32,
+) -> Result<(), String> {
+    // config.jsonを読み込む
+    let config_path = get_config_path()?;
+
+    // デバッグ用: パスを出力
+    println!("Trying to read config from: {:?}", config_path);
+
+    // ファイルを読み込む
+    let config_content = fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to read config file at {:?}: {}", config_path, e))?;
+
+    // JSONをパース
+    let mut config: Config = serde_json::from_str(&config_content)
+        .map_err(|e| format!("Failed to parse config JSON: {}", e))?;
+
+    // 指定されたIDのPLCを探して削除
+    let original_len = config.plcs.len();
+    config.plcs.retain(|plc| plc.id != plc_id);
+
+    // 削除されたか確認
+    if config.plcs.len() == original_len {
+        return Err(format!("PLC with ID {} not found", plc_id));
+    }
+
+    // jsonに書き込み
+    let mut file = File::create(&config_path)
+        .map_err(|e| format!("Failed to open file for writing: {}", e))?;
+    let json_string = serde_json::to_string_pretty(&config)
+        .expect("構造体をJSONに変換できませんでした");
+
+    // ファイルに書き込み
+    file.write_all(json_string.as_bytes())
+        .map_err(|e| format!("jsonファイルへの書き込み異常: {}", e))?;
+
+    println!("Successfully deleted PLC with ID: {}", plc_id);
+    Ok(())
 }

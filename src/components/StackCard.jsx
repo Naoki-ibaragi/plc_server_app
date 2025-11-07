@@ -40,7 +40,7 @@ export default function StackCard() {
     // listenハンドラの立上
     const openListener = async () => {
       try {
-        const unlisten = await listen('plc-message', (event) => {
+        const unlistenMessage = await listen('plc-message', (event) => {
           const { plc_id, message, timestamp } = event.payload;
           //対象のplc_idのplcListのlastReceivedをmessageで更新
           setPlcList((prev) =>
@@ -51,7 +51,26 @@ export default function StackCard() {
             )
           );
         });
-        return unlisten; // unlistenを返す
+
+        const unlistenDisconnect = await listen('plc-disconnected', (event) => {
+          const { plc_id, reason } = event.payload;
+          console.log(`PLC ${plc_id} disconnected: ${reason}`);
+
+          // 対象のPLCの接続状態を切断に更新
+          setPlcList((prev) =>
+            prev.map((p) =>
+              p.id === plc_id
+                ? { ...p, status: "disconnected", data: null }
+                : p
+            )
+          );
+
+        });
+
+        return () => {
+          unlistenMessage();
+          unlistenDisconnect();
+        };
       } catch (err) {
         console.error("Failed to setup listener:", err);
         setError(err);
@@ -90,7 +109,6 @@ export default function StackCard() {
         plcIp: config.plc_ip,
         plcPort: config.plc_port,
         pcIp: config.pc_ip,
-        pcPort: config.pc_port,
       });
 
       // 接続成功したらステータスを更新
@@ -136,27 +154,29 @@ export default function StackCard() {
         plcIp: formData.plc_ip,
         plcPort: parseInt(formData.plc_port),
         pcIp: formData.pc_ip,
-        pcPort: parseInt(formData.pc_port),
       });
 
+      console.log("newConfig",newConfig);
+
       // 設定リストに追加
-      setPlcConfigs((prev) => [...prev, newConfig]);
+      //今回追加した最終要素を取り出し
+      const last_item=newConfig.at(-1);
+      setPlcConfigs((prev) => [...prev, last_item]);
 
       // 表示リストに追加
       setPlcList((prev) => [
         ...prev,
         {
-          id: newConfig.id,
-          name: newConfig.name,
+          id: last_item.id,
+          name: last_item.name,
           status: "disconnected",
-          ip: newConfig.plc_ip,
-          port: newConfig.plc_port,
+          ip: last_item.plc_ip,
+          port: last_item.plc_port,
           lastReceived: "-",
           data: null,
         },
       ]);
 
-      alert("PLCを追加しました");
     } catch (err) {
       console.error("Failed to add PLC:", err);
       alert(`PLC追加に失敗しました: ${err}`);
@@ -173,7 +193,6 @@ export default function StackCard() {
         plcIp: formData.plc_ip,
         plcPort: parseInt(formData.plc_port),
         pcIp: formData.pc_ip,
-        pcPort: parseInt(formData.pc_port),
       });
 
       // 設定リストを更新
@@ -211,7 +230,6 @@ export default function StackCard() {
       // 表示リストから削除
       setPlcList((prev) => prev.filter((p) => p.id !== plc.id));
 
-      alert("PLCを削除しました");
     } catch (err) {
       console.error("Failed to delete PLC:", err);
       alert(`PLC削除に失敗しました: ${err}`);
@@ -273,7 +291,7 @@ export default function StackCard() {
       {/* ヘッダー */}
       <header className="bg-gray-800 shadow-lg">
         <div className="flex items-center justify-between p-4">
-          <h1 className="text-2xl font-bold">PLC監視システム</h1>
+          <h1 className="text-2xl font-bold">設備情報収集システム</h1>
           <div className="flex items-center gap-4">
             <span className="px-3 py-1 bg-blue-900/50 text-blue-400 rounded-full text-sm font-medium">
               {connectedCount}/{plcList.length} 接続中

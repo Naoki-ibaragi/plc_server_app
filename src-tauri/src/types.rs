@@ -17,7 +17,6 @@ pub struct PlcConfig {
     pub plc_ip: String,
     pub plc_port: u16,
     pub pc_ip: String,
-    pub pc_port: u16,
 }
 
 /// 設定ファイル全体の構造
@@ -33,7 +32,6 @@ pub struct PlcConnection {
     pub plc_ip: String,
     pub plc_port: u16,
     pub pc_ip: String,
-    pub pc_port: u16,
     pub is_connected: bool,
 }
 

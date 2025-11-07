@@ -4,7 +4,8 @@ use std::sync::Arc;
 use tokio::io::AsyncReadExt;
 use crate::types::PlcConnection;
 use crate::state::ConnectionState;
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Utc};
+use crate::data_handler::{create_table_for_plc, save_plc_data};
 
 /// PLCに接続する
 #[command]
@@ -13,7 +14,6 @@ pub async fn connect_plc(
     plc_ip: String,
     plc_port: u16,
     pc_ip: String,
-    pc_port: u16,
     state: tauri::State<'_, ConnectionState>,
     app: AppHandle,
 ) -> Result<String, String> {
@@ -29,15 +29,19 @@ pub async fn connect_plc(
         }
     }
 
-    // PCのポートでリッスンを開始
-    let listen_addr = format!("{}:{}", pc_ip, pc_port);
-    println!("Trying to listen on: {}", listen_addr);
+    // PCのポートでリッスンを開始（ポート番号0で自動割り当て）
+    let listen_addr = format!("{}:0", pc_ip);
+    println!("Trying to listen on: {} (auto-assign port)", listen_addr);
 
-    let _ = TcpListener::bind(&listen_addr)
+    let listener = TcpListener::bind(&listen_addr)
         .await
         .map_err(|e| format!("Failed to bind to {}: {}", listen_addr, e))?;
 
-    println!("Listening on {}", listen_addr);
+    let local_addr = listener.local_addr()
+        .map_err(|e| format!("Failed to get local address: {}", e))?;
+    let pc_port = local_addr.port();
+
+    println!("Listening on {}:{}", pc_ip, pc_port);
 
     // PLCに接続を試みる（接続先として）
     let plc_addr = format!("{}:{}", plc_ip, plc_port);
@@ -59,10 +63,14 @@ pub async fn connect_plc(
                 plc_ip: plc_ip.clone(),
                 plc_port,
                 pc_ip: pc_ip.clone(),
-                pc_port,
                 is_connected: true,
             },
         );
+    }
+
+    // PLCごとのテーブルを作成
+    if let Err(e) = create_table_for_plc(plc_id) {
+        eprintln!("Failed to create table for PLC {}: {}", plc_id, e);
     }
 
     // 受信ループを別のタスクで実行
@@ -104,10 +112,22 @@ async fn receive_data_from_plc(
             Ok(0) => {
                 println!("PLC ID {} connection closed by remote", plc_id);
                 // 接続が閉じられた場合
-                let mut connections = state.lock();
-                if let Some(conn) = connections.get_mut(&plc_id) {
-                    conn.is_connected = false;
+                {
+                    let mut connections = state.lock();
+                    if let Some(conn) = connections.get_mut(&plc_id) {
+                        conn.is_connected = false;
+                    }
                 }
+
+                // フロントエンドに切断イベントを送信
+                let payload = serde_json::json!({
+                    "plc_id": plc_id,
+                    "reason": "Connection closed by remote",
+                });
+                if let Err(e) = app.emit("plc-disconnected", payload) {
+                    eprintln!("Failed to emit disconnection event: {}", e);
+                }
+
                 break;
             }
             Ok(n) => {
@@ -119,10 +139,22 @@ async fn receive_data_from_plc(
             Err(e) => {
                 eprintln!("Error reading from PLC ID {}: {}", plc_id, e);
                 // エラーが発生した場合
-                let mut connections = state.lock();
-                if let Some(conn) = connections.get_mut(&plc_id) {
-                    conn.is_connected = false;
+                {
+                    let mut connections = state.lock();
+                    if let Some(conn) = connections.get_mut(&plc_id) {
+                        conn.is_connected = false;
+                    }
                 }
+
+                // フロントエンドに切断イベントを送信
+                let payload = serde_json::json!({
+                    "plc_id": plc_id,
+                    "reason": format!("Error: {}", e),
+                });
+                if let Err(e) = app.emit("plc-disconnected", payload) {
+                    eprintln!("Failed to emit disconnection event: {}", e);
+                }
+
                 break;
             }
         }
@@ -134,7 +166,7 @@ async fn receive_data_from_plc(
 /// 受信したデータを処理する
 fn process_received_data(plc_id: u32, data: &[u8],app:&AppHandle) {
     println!("Processing data for PLC ID {}: {:?}", plc_id, data);
-    
+
     // UTF-8としてデコード
     match std::str::from_utf8(data) {
         Ok(text) => {
@@ -143,16 +175,21 @@ fn process_received_data(plc_id: u32, data: &[u8],app:&AppHandle) {
             // JST（ローカル時刻）に変換
             let utc_now: DateTime<Utc> = Utc::now();
             let jst_now = utc_now.with_timezone(&chrono::FixedOffset::east_opt(9 * 3600).unwrap());
-            let formatted = jst_now.format("%Y-%m-%d %H:%M:%S").to_string();
+            let formatted_date = jst_now.format("%Y-%m-%d %H:%M:%S").to_string();
 
             let payload = serde_json::json!({
                 "plc_id": plc_id,
                 "message": text,
-                "timestamp": formatted,
+                "timestamp": formatted_date,
             });
-            
+
             if let Err(e) = app.emit("plc-message", payload) {
                 eprintln!("Failed to emit event: {}", e);
+            }
+
+            // データベースに保存（チャネル経由で送信）
+            if let Err(e) = save_plc_data(plc_id, &formatted_date, text) {
+                eprintln!("Failed to send data to DB writer for PLC {}: {}", plc_id, e);
             }
 
         }

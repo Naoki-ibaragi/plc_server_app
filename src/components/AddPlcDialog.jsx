@@ -14,7 +14,6 @@ export default function AddPlcDialog({ isOpen, onClose, onAdd }) {
     plc_ip: "",
     plc_port: "",
     pc_ip: "",
-    pc_port: "",
   });
 
   const handleSubmit = async (e) => {
@@ -26,7 +25,6 @@ export default function AddPlcDialog({ isOpen, onClose, onAdd }) {
         plc_ip: "",
         plc_port: "",
         pc_ip: "",
-        pc_port: "",
       });
       onClose();
     } catch (error) {
@@ -94,18 +92,6 @@ export default function AddPlcDialog({ isOpen, onClose, onAdd }) {
               onChange={(e) => setFormData({ ...formData, pc_ip: e.target.value })}
               className="w-full px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
               placeholder="例: 192.168.1.10"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">PCポート番号</label>
-            <input
-              type="number"
-              value={formData.pc_port}
-              onChange={(e) => setFormData({ ...formData, pc_port: e.target.value })}
-              className="w-full px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
-              placeholder="例: 5000"
               required
             />
           </div>

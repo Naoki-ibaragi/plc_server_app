@@ -27,3 +27,5 @@ tauri-plugin-single-instance="2.0"
 tauri-plugin-log = "2"
 tokio = { version = "1", features = ["full"] }
 parking_lot = "0.12"
+rusqlite = { version = "0.32", features = ["bundled"] }
+lazy_static = "1.4"
