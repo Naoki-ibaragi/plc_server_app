@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tokio::io::AsyncReadExt;
 use crate::types::PlcConnection;
 use crate::state::ConnectionState;
+use chrono::{DateTime, Local, Utc};
 
 /// PLCに接続する
 #[command]
@@ -138,13 +139,16 @@ fn process_received_data(plc_id: u32, data: &[u8],app:&AppHandle) {
     match std::str::from_utf8(data) {
         Ok(text) => {
             println!("Received text from PLC ID {}: {}", plc_id, text);
-            // TODO: デコードされたテキストを使った処理を実装
-            // 例: イベントとしてフロントエンドに送信、ファイルに保存など
             //フロントエンドに送信する
+            // JST（ローカル時刻）に変換
+            let utc_now: DateTime<Utc> = Utc::now();
+            let jst_now = utc_now.with_timezone(&chrono::FixedOffset::east_opt(9 * 3600).unwrap());
+            let formatted = jst_now.format("%Y-%m-%d %H:%M:%S").to_string();
+
             let payload = serde_json::json!({
                 "plc_id": plc_id,
                 "message": text,
-                "timestamp": chrono::Utc::now().to_rfc3339(),
+                "timestamp": formatted,
             });
             
             if let Err(e) = app.emit("plc-message", payload) {
