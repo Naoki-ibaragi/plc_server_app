@@ -21,13 +21,18 @@ use data_handler::init_database;
 fn main() {
     let connection_state = init_connection_state();
 
-    // データベースを初期化
-    if let Err(e) = init_database() {
-        eprintln!("Failed to initialize database: {}", e);
-    }
+    // データベースを初期化し、チャネルの送信側を取得
+    let db_channel = match init_database() {
+        Ok(tx) => tx,
+        Err(e) => {
+            eprintln!("Failed to initialize database: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     tauri::Builder::default()
         .manage(connection_state)
+        .manage(db_channel) // DB チャネルを状態として管理
         .invoke_handler(tauri::generate_handler![init_socket, connect_plc, disconnect_plc, add_plc, delete_plc])
         .plugin(single_instance(|app, _args, _cwd| {
             // 既にインスタンスが起動している場合、ウィンドウを表示

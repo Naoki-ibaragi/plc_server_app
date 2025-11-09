@@ -3,7 +3,7 @@ use tokio::net::{TcpStream, TcpListener};
 use std::sync::Arc;
 use tokio::io::AsyncReadExt;
 use crate::types::PlcConnection;
-use crate::state::ConnectionState;
+use crate::state::{ConnectionState, DbChannelState};
 use chrono::{DateTime, Utc};
 use crate::data_handler::{create_table_for_plc, save_plc_data};
 
@@ -15,6 +15,7 @@ pub async fn connect_plc(
     plc_port: u16,
     pc_ip: String,
     state: tauri::State<'_, ConnectionState>,
+    db_channel: tauri::State<'_, DbChannelState>,
     app: AppHandle,
 ) -> Result<String, String> {
      println!("Connecting to PLC ID: {}, IP: {}:{}", plc_id, plc_ip, plc_port);
@@ -74,9 +75,11 @@ pub async fn connect_plc(
     }
 
     // 受信ループを別のタスクで実行
+    // DB チャネルをクローンして渡す（ロックフリー）
     let state_clone = Arc::clone(&state.inner());
+    let db_tx = db_channel.inner().clone();
     tokio::spawn(async move {
-        receive_data_from_plc(plc_id, stream, state_clone,app).await;
+        receive_data_from_plc(plc_id, stream, state_clone, db_tx, app).await;
     });
 
     Ok(format!("Connected to PLC {}:{}", plc_ip, plc_port))
@@ -87,7 +90,8 @@ async fn receive_data_from_plc(
     plc_id: u32,
     mut stream: TcpStream,
     state: ConnectionState,
-    app:AppHandle,
+    db_tx: DbChannelState,
+    app: AppHandle,
 ) {
     println!("Starting receive loop for PLC ID: {}", plc_id);
     let mut buffer = vec![0u8; 4096];
@@ -134,7 +138,7 @@ async fn receive_data_from_plc(
                 println!("Received {} bytes from PLC ID {}", n, plc_id);
                 // 受信したデータを処理
                 let received_data = &buffer[..n];
-                process_received_data(plc_id, received_data,&app);
+                process_received_data(plc_id, received_data, &db_tx, &app);
             }
             Err(e) => {
                 eprintln!("Error reading from PLC ID {}: {}", plc_id, e);
@@ -164,7 +168,7 @@ async fn receive_data_from_plc(
 }
 
 /// 受信したデータを処理する
-fn process_received_data(plc_id: u32, data: &[u8],app:&AppHandle) {
+fn process_received_data(plc_id: u32, data: &[u8], db_tx: &DbChannelState, app: &AppHandle) {
     println!("Processing data for PLC ID {}: {:?}", plc_id, data);
 
     // UTF-8としてデコード
@@ -186,9 +190,11 @@ fn process_received_data(plc_id: u32, data: &[u8],app:&AppHandle) {
             if let Err(e) = app.emit("plc-message", payload) {
                 eprintln!("Failed to emit event: {}", e);
             }
+            /*----フロントエンドへ送信完了----- */
 
-            // データベースに保存（チャネル経由で送信）
-            if let Err(e) = save_plc_data(plc_id, &formatted_date, text) {
+            /*----受信データをデータベースに保存（チャネル経由で送信）---- */
+            // 各タスクが独自のクローンを持っているので、ロック不要で高速
+            if let Err(e) = save_plc_data(db_tx, plc_id, &formatted_date, text) {
                 eprintln!("Failed to send data to DB writer for PLC {}: {}", plc_id, e);
             }
 

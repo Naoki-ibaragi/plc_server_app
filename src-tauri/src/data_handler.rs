@@ -4,11 +4,14 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use lazy_static::lazy_static;
 use tokio::sync::mpsc;
+use std::collections::HashMap;
+use serde_json::Value;
 
 lazy_static! {
     static ref DB_CONNECTION: Mutex<Option<Connection>> = Mutex::new(None);
-    static ref DB_WRITER_CHANNEL: Mutex<Option<mpsc::UnboundedSender<DbWriteRequest>>> = Mutex::new(None);
 }
+
+static CREATE_TABLE_SQL:&str = include_str!("sql/create_table.sql");
 
 /// DB書き込みリクエストの構造体
 #[derive(Debug, Clone)]
@@ -19,7 +22,8 @@ pub struct DbWriteRequest {
 }
 
 /// データベースを初期化し、DB書き込み専用スレッドを起動する
-pub fn init_database() -> Result<()> {
+/// チャネルの送信側を返すので、各スレッドで clone して使用する
+pub fn init_database() -> Result<mpsc::UnboundedSender<DbWriteRequest>> {
     let db_path = get_database_path();
 
     // ディレクトリが存在しない場合は作成
@@ -35,21 +39,16 @@ pub fn init_database() -> Result<()> {
 
     println!("Database initialized at: {:?}", db_path);
 
-    // DB書き込み専用スレッドを起動
-    start_db_writer_thread();
+    // DB書き込み専用スレッドを起動し、チャネルの送信側を返す
+    let tx = start_db_writer_thread();
 
-    Ok(())
+    Ok(tx)
 }
 
 /// DB書き込み専用スレッドを起動する
-fn start_db_writer_thread() {
+/// チャネルの送信側を返すので、呼び出し側で clone して使用する
+fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
     let (tx, mut rx) = mpsc::unbounded_channel::<DbWriteRequest>();
-
-    // チャネルの送信側をグローバルに保存
-    {
-        let mut channel = DB_WRITER_CHANNEL.lock().unwrap();
-        *channel = Some(tx);
-    }
 
     // DB書き込み専用スレッドを起動
     std::thread::spawn(move || {
@@ -60,6 +59,16 @@ fn start_db_writer_thread() {
 
             let db = DB_CONNECTION.lock().unwrap();
             if let Some(conn) = db.as_ref() {
+                //messageのsql文への変換処理を書く
+                let recv_data: HashMap<String, Value> = serde_json::from_str(&request.message).unwrap();
+
+                for (key,value) in &recv_data{
+
+
+                }
+
+
+
                 let insert_sql = format!(
                     "INSERT INTO {} (timestamp, message) VALUES (?1, ?2)",
                     table_name
@@ -84,6 +93,8 @@ fn start_db_writer_thread() {
 
         println!("DB writer thread stopped");
     });
+
+    tx
 }
 
 /// データベースのパスを取得
@@ -100,20 +111,11 @@ fn get_database_path() -> PathBuf {
 /// テーブル名: plc_data_{plc_id}
 pub fn create_table_for_plc(plc_id: u32) -> Result<()> {
     let table_name = format!("plc_data_{}", plc_id);
+    let sql=CREATE_TABLE_SQL.replace("{TABLE_NAME",&table_name);
 
     let db = DB_CONNECTION.lock().unwrap();
     if let Some(conn) = db.as_ref() {
-        let create_table_sql = format!(
-            "CREATE TABLE IF NOT EXISTS {} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT NOT NULL,
-                message TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )",
-            table_name
-        );
-
-        conn.execute(&create_table_sql, [])?;
+        conn.execute(&sql, [])?;
         println!("Table '{}' created or already exists", table_name);
     }
 
@@ -121,21 +123,22 @@ pub fn create_table_for_plc(plc_id: u32) -> Result<()> {
 }
 
 /// PLCから受信したデータをDB書き込みスレッドに送信する
-pub fn save_plc_data(plc_id: u32, timestamp: &str, message: &str) -> Result<(), String> {
-    let channel = DB_WRITER_CHANNEL.lock().unwrap();
+/// 各受信タスクは独自の tx クローンを持っているので、ロック不要
+pub fn save_plc_data(
+    tx: &mpsc::UnboundedSender<DbWriteRequest>,
+    plc_id: u32,
+    timestamp: &str,
+    message: &str,
+) -> Result<(), String> {
+    let request = DbWriteRequest {
+        plc_id,
+        timestamp: timestamp.to_string(),
+        message: message.to_string(),
+    };
 
-    if let Some(tx) = channel.as_ref() {
-        let request = DbWriteRequest {
-            plc_id,
-            timestamp: timestamp.to_string(),
-            message: message.to_string(),
-        };
-
-        tx.send(request).map_err(|e| format!("Failed to send to DB writer thread: {}", e))?;
-        Ok(())
-    } else {
-        Err("DB writer channel not initialized".to_string())
-    }
+    tx.send(request)
+        .map_err(|e| format!("Failed to send to DB writer thread: {}", e))?;
+    Ok(())
 }
 
 /// データベース接続をクローズする(アプリケーション終了時)
