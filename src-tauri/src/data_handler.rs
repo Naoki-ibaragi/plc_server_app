@@ -7,6 +7,10 @@ use tokio::sync::mpsc;
 use std::collections::HashMap;
 use serde_json::Value;
 
+use create_sql::*;
+
+use crate::create_sql::create_u1_ph_sql;
+
 lazy_static! {
     static ref DB_CONNECTION: Mutex<Option<Connection>> = Mutex::new(None);
 }
@@ -55,39 +59,47 @@ fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
         println!("DB writer thread started");
 
         while let Some(request) = rx.blocking_recv() {
-            let table_name = format!("plc_data_{}", request.plc_id);
+            let table_name = format!("clt_data_{}", request.plc_id);
+            let machine_name = format!("CLT_{}", request.plc_id);
+            let timestamp=request.timestamp;
 
             let db = DB_CONNECTION.lock().unwrap();
             if let Some(conn) = db.as_ref() {
+                conn.execute("BEGIN TRANSACTION",[]);
                 //messageのsql文への変換処理を書く
                 let recv_data: HashMap<String, Value> = serde_json::from_str(&request.message).unwrap();
+                
+                //ロット番号のとりだし
+                let lot_name = recv_data
+                    .get("lot_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
 
+                //機種名のとりだし
+                let type_name = recv_data
+                    .get("type_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+
+                //各ユニット情報の取り出し
+                let mut sql_vec=vec![];
                 for (key,value) in &recv_data{
+                    if key.contains("U1_PH"){
+                        sql_vec.push(create_u1_ph_sql(&table_name,&machine_name,lot_name,type_name,&timestamp,value));
+                    }else if key.contains("_A1_"){
+                        let unit_name = key.split('_').next().unwrap_or_default();
+                        sql_vec.push(create_arm1_sql(&table_name,&machine_name,lot_name,type_name,&timestamp,unit_name,value));
+                    }else if key.contains("_A2_"){
+                        let unit_name = key.split('_').next().unwrap_or_default();
+                        sql_vec.push(create_arm2_sql(&table_name,&machine_name,lot_name,type_name,&timestamp,unit_name,value));
+                    }else if key.contains("U2_PH"){
 
+                    }else if key.contains("_TS_"){
+                        
+                    }
 
                 }
-
-
-
-                let insert_sql = format!(
-                    "INSERT INTO {} (timestamp, message) VALUES (?1, ?2)",
-                    table_name
-                );
-
-                match conn.execute(&insert_sql, [&request.timestamp, &request.message]) {
-                    Ok(_) => {
-                        println!(
-                            "Data saved to '{}': {} - {}",
-                            table_name, request.timestamp, request.message
-                        );
-                    }
-                    Err(e) => {
-                        eprintln!(
-                            "Failed to save data to '{}': {}",
-                            table_name, e
-                        );
-                    }
-                }
+                conn.execute("COMMIT",[]);
             }
         }
 

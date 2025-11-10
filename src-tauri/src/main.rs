@@ -8,6 +8,7 @@ mod config;
 mod plc_commands;
 mod tray;
 mod data_handler;
+mod create_sql;
 
 use tauri::Manager;
 use tauri_plugin_single_instance::init as single_instance;
