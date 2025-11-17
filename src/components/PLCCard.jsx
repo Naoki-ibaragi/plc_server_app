@@ -183,7 +183,7 @@ export default function PLCCard({ plc, config,onConnect, onDisconnect, onDelete,
               <p className="text-sm text-gray-400 mb-2">受信データ</p>
               {plc.data ? (
                 <div className="bg-gray-900 p-3 rounded border border-gray-700">
-                  <pre className="text-sm text-green-400 font-mono overflow-x-auto">
+                  <pre className="text-sm text-green-400 font-mono overflow-y-auto max-h-20 whitespace-pre-wrap break-all">
                     {JSON.stringify(plc.data, null, 2)}
                   </pre>
                 </div>

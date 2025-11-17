@@ -7,14 +7,13 @@ use tokio::sync::mpsc;
 use std::collections::HashMap;
 use serde_json::Value;
 
-use create_sql::*;
-
-use crate::create_sql::create_u1_ph_sql;
+use crate::regist_data_to_db::*;
 
 lazy_static! {
     static ref DB_CONNECTION: Mutex<Option<Connection>> = Mutex::new(None);
 }
 
+//テーブルを作成するためのsql文を読み込み
 static CREATE_TABLE_SQL:&str = include_str!("sql/create_table.sql");
 
 /// DB書き込みリクエストの構造体
@@ -46,12 +45,12 @@ pub fn init_database() -> Result<mpsc::UnboundedSender<DbWriteRequest>> {
     // DB書き込み専用スレッドを起動し、チャネルの送信側を返す
     let tx = start_db_writer_thread();
 
-    Ok(tx)
+    tx
 }
 
 /// DB書き込み専用スレッドを起動する
 /// チャネルの送信側を返すので、呼び出し側で clone して使用する
-fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
+fn start_db_writer_thread() -> Result<mpsc::UnboundedSender<DbWriteRequest>,rusqlite::Error> {
     let (tx, mut rx) = mpsc::unbounded_channel::<DbWriteRequest>();
 
     // DB書き込み専用スレッドを起動
@@ -60,53 +59,160 @@ fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
 
         while let Some(request) = rx.blocking_recv() {
             let table_name = format!("clt_data_{}", request.plc_id);
-            let machine_name = format!("CLT_{}", request.plc_id);
-            let timestamp=request.timestamp;
 
             let db = DB_CONNECTION.lock().unwrap();
             if let Some(conn) = db.as_ref() {
                 conn.execute("BEGIN TRANSACTION",[]);
-                //messageのsql文への変換処理を書く
+                //PLCから受信したjson形式データをhashmapに変換する
                 let recv_data: HashMap<String, Value> = serde_json::from_str(&request.message).unwrap();
                 
                 //ロット番号のとりだし
                 let lot_name = recv_data
-                    .get("lot_name")
+                    .get("LOT")
                     .and_then(|v| v.as_str())
                     .unwrap_or("unknown");
 
                 //機種名のとりだし
                 let type_name = recv_data
-                    .get("type_name")
+                    .get("TYPE")
                     .and_then(|v| v.as_str())
                     .unwrap_or("unknown");
 
+                //装置名のとりだし
+                let machine_name = recv_data
+                    .get("MACHINE")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+                
+                println!("lot_name:{}",lot_name);
+                println!("type_name:{}",type_name);
+                println!("machine_name:{}",machine_name);
+
                 //各ユニット情報の取り出し
-                let mut sql_vec=vec![];
                 for (key,value) in &recv_data{
-                    if key.contains("U1_PH"){
-                        sql_vec.push(create_u1_ph_sql(&table_name,&machine_name,lot_name,type_name,&timestamp,value));
-                    }else if key.contains("_A1_"){
-                        let unit_name = key.split('_').next().unwrap_or_default();
-                        sql_vec.push(create_arm1_sql(&table_name,&machine_name,lot_name,type_name,&timestamp,unit_name,value));
-                    }else if key.contains("_A2_"){
-                        let unit_name = key.split('_').next().unwrap_or_default();
-                        sql_vec.push(create_arm2_sql(&table_name,&machine_name,lot_name,type_name,&timestamp,unit_name,value));
-                    }else if key.contains("U2_PH"){
-
-                    }else if key.contains("_TS_"){
-                        
+                    if key.contains("U1_TR"){ //LD TRAYデータを登録
+                        match regist_u1_tr_info(&conn,&table_name,&machine_name,&lot_name,&type_name,value){
+                            Err(e)=>{
+                                println!("regist tray data  error:{}",e);
+                                continue;
+                            },
+                            _=>{}
+                        };
+                    }else if key.contains("_A1_"){ //上流アームコレットの使用回数データを登録
+                        //アームのユニット名を取得
+                        let unit_name = match key.split('_').next() {
+                            Some(v) => v,
+                            None => continue,  // ここで continue が使える！
+                        };
+                        match regist_arm1_info(&conn,&table_name,&machine_name,&lot_name,&type_name,&unit_name,value){
+                            Err(e)=>{
+                                println!("regist arm1 data error:{}",e);
+                                continue;
+                            },
+                            _=>{}
+                        }
+                    }else if key.contains("_A2_"){ //下流アームコレットの使用回数データを登録
+                        //アームのユニット名を取得
+                        let unit_name = match key.split('_').next() {
+                            Some(v) => v,
+                            None => continue,  // ここで continue が使える！
+                        };
+                        match regist_arm2_info(&conn,&table_name,&machine_name,&lot_name,&type_name,&unit_name,value){
+                            Err(e)=>{
+                                println!("regist arm2 data error:{}",e);
+                                continue;
+                            },
+                            _=>{}
+                        }
+                    }else if key.contains("_PH_"){ //DC1,ULD予熱テーブルのデータを登録
+                        //アームのユニット名を取得
+                        let unit_name = match key.split('_').next() {
+                            Some(v) => v,
+                            None => continue,  // ここで continue が使える！
+                        };
+                        match regist_ph_info(&conn,&table_name,&machine_name,&lot_name,&type_name,&unit_name,value){
+                            Err(e)=>{
+                                println!("regist preheat data error:{}",e);
+                                continue;
+                            },
+                            _=>{}
+                        }
+                    }else if key.contains("_TS_") && !key.contains("U6"){ //DC1~DC2検査テーブルのデータを登録
+                        //ユニット名を取得
+                        let unit_name = match key.split('_').next() {
+                            Some(v) => v,
+                            None => continue,  // ここで continue が使える！
+                        };
+                        match regist_ts_info(&conn,&table_name,&machine_name,&lot_name,&type_name,&unit_name,value){
+                            Err(e)=>{
+                                println!("regist teststage data error:{}",e);
+                                continue;
+                            },
+                            _=>{}
+                        }
+                    }else if key.contains("_TS_") && key.contains("U6"){ //IP検査テーブルのデータを登録
+                        match regist_ip_ts_info(&conn,&table_name,&machine_name,&lot_name,&type_name,value){
+                            Err(e)=>{
+                                println!("regist ph data error:{}",e);
+                                continue;
+                            },
+                            _=>{}
+                        }
+                    }else if key.contains("U6_T1_"){ //IP表面検査のBINデータを登録
+                        match regist_ip_surf_info(&conn,&table_name,&machine_name,&lot_name,&type_name,value){
+                            Err(e)=>{
+                                println!("regist ph data error:{}",e);
+                                continue;
+                            },
+                            _=>{}
+                        }
+                    }else if key.contains("U6_T2_"){ //IP裏面検検のBINデータを登録
+                        match regist_ip_back_info(&conn,&table_name,&machine_name,&lot_name,&type_name,value){
+                            Err(e)=>{
+                                println!("regist ph data error:{}",e);
+                                continue;
+                            },
+                            _=>{}
+                        }
+                    }else if key.contains("U7_PI_"){ //ULDポケット認識時のデータを登録
+                        match regist_uld_pocket_info(&conn,&table_name,&machine_name,&lot_name,&type_name,value){
+                            Err(e)=>{
+                                println!("regist ph data error:{}",e);
+                                continue;
+                            },
+                            _=>{}
+                        }
+                    }else if key.contains("U7_CI_"){ //ULDポケット挿入時のデータを登録
+                        match regist_uld_chip_info(&conn,&table_name,&machine_name,&lot_name,&type_name,value){
+                            Err(e)=>{
+                                println!("regist ph data error:{}",e);
+                                continue;
+                            },
+                            _=>{}
+                        }
+                    }else if key.contains("_AL_"){ //アラーム情報の登録
+                        //ユニット名を取得
+                        let unit_name = match key.split('_').next() {
+                            Some(v) => v,
+                            None => continue,  // ここで continue が使える！
+                        };
+                        match regist_alarm_info(&conn,&table_name,&machine_name,&lot_name,&type_name,&unit_name,value){
+                            Err(e)=>{
+                                println!("regist alarm data error:{}",e);
+                                continue;
+                            },
+                            _=>{}
+                        }
                     }
-
                 }
                 conn.execute("COMMIT",[]);
             }
-        }
+        }//<-threadの終端
 
         println!("DB writer thread stopped");
     });
 
-    tx
+    Ok(tx)
 }
 
 /// データベースのパスを取得
@@ -122,8 +228,8 @@ fn get_database_path() -> PathBuf {
 /// PLC IDに基づいてテーブルを作成する
 /// テーブル名: plc_data_{plc_id}
 pub fn create_table_for_plc(plc_id: u32) -> Result<()> {
-    let table_name = format!("plc_data_{}", plc_id);
-    let sql=CREATE_TABLE_SQL.replace("{TABLE_NAME",&table_name);
+    let table_name = format!("clt_data_{}", plc_id);
+    let sql=CREATE_TABLE_SQL.replace("{TABLE_NAME}",&table_name);
 
     let db = DB_CONNECTION.lock().unwrap();
     if let Some(conn) = db.as_ref() {

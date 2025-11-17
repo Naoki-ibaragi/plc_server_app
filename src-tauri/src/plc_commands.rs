@@ -7,7 +7,7 @@ use crate::state::{ConnectionState, DbChannelState};
 use chrono::{DateTime, Utc};
 use crate::data_handler::{create_table_for_plc, save_plc_data};
 
-/// PLCに接続する
+/// PLCに接続する(フロントエンドから呼び出し)
 #[command]
 pub async fn connect_plc(
     plc_id: u32,
@@ -128,6 +128,7 @@ async fn receive_data_from_plc(
                     "plc_id": plc_id,
                     "reason": "Connection closed by remote",
                 });
+
                 if let Err(e) = app.emit("plc-disconnected", payload) {
                     eprintln!("Failed to emit disconnection event: {}", e);
                 }
@@ -190,7 +191,6 @@ fn process_received_data(plc_id: u32, data: &[u8], db_tx: &DbChannelState, app: 
             if let Err(e) = app.emit("plc-message", payload) {
                 eprintln!("Failed to emit event: {}", e);
             }
-            /*----フロントエンドへ送信完了----- */
 
             /*----受信データをデータベースに保存（チャネル経由で送信）---- */
             // 各タスクが独自のクローンを持っているので、ロック不要で高速
@@ -216,6 +216,7 @@ fn process_received_data(plc_id: u32, data: &[u8], db_tx: &DbChannelState, app: 
 pub async fn disconnect_plc(
     plc_id: u32,
     state: tauri::State<'_, ConnectionState>,
+    app: AppHandle,
 ) -> Result<String, String> {
     println!("Disconnecting from PLC ID: {}", plc_id);
 
@@ -231,6 +232,17 @@ pub async fn disconnect_plc(
         // TODO: ソケットを閉じる処理
 
         println!("Disconnected from PLC ID: {}", plc_id);
+
+        // フロントエンドに切断イベントを送信
+        let payload = serde_json::json!({
+            "plc_id": plc_id,
+            "reason": "Manually disconnected",
+        });
+
+        if let Err(e) = app.emit("plc-disconnected", payload) {
+            eprintln!("Failed to emit disconnection event: {}", e);
+        }
+
         Ok(format!("Disconnected from PLC {}", plc_id))
     } else {
         Err("PLC not found".to_string())

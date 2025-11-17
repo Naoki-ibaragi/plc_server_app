@@ -42,6 +42,13 @@ export default function StackCard() {
       try {
         const unlistenMessage = await listen('plc-message', (event) => {
           const { plc_id, message, timestamp } = event.payload;
+
+          // nullや空データの場合は更新しない(切断時に無効なデータが送られてくる場合があるため)
+          if (!message || message === "" || (typeof message === 'object' && Object.keys(message).length === 0)) {
+            console.log(`PLC ${plc_id}: 空またはnullのデータを受信したためスキップ`);
+            return;
+          }
+
           //対象のplc_idのplcListのlastReceivedをmessageで更新
           setPlcList((prev) =>
             prev.map((p) =>
@@ -56,15 +63,14 @@ export default function StackCard() {
           const { plc_id, reason } = event.payload;
           console.log(`PLC ${plc_id} disconnected: ${reason}`);
 
-          // 対象のPLCの接続状態を切断に更新
+          // 対象のPLCの接続状態を切断に更新(最終受信データと時刻は保持)
           setPlcList((prev) =>
             prev.map((p) =>
               p.id === plc_id
-                ? { ...p, status: "disconnected", data: null }
+                ? { ...p, status: "disconnected" }
                 : p
             )
           );
-
         });
 
         return () => {
@@ -132,10 +138,10 @@ export default function StackCard() {
       // Rust側の切断コマンドを呼び出す
       await invoke("disconnect_plc", { plcId: plc.id });
 
-      // 切断成功したらステータスを更新
+      // 切断成功したらステータスを更新(最終受信データと時刻は保持)
       setPlcList((prev) =>
         prev.map((p) =>
-          p.id === plc.id ? { ...p, status: "disconnected", data: null } : p
+          p.id === plc.id ? { ...p, status: "disconnected" } : p
         )
       );
     } catch (err) {
