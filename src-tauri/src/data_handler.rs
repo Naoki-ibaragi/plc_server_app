@@ -6,6 +6,7 @@ use lazy_static::lazy_static;
 use tokio::sync::mpsc;
 use std::collections::HashMap;
 use serde_json::Value;
+use std::env;
 
 use crate::regist_data_to_db::*;
 
@@ -218,11 +219,8 @@ fn start_db_writer_thread() -> Result<mpsc::UnboundedSender<DbWriteRequest>,rusq
 /// データベースのパスを取得
 fn get_database_path() -> PathBuf {
     // 実行ファイルのディレクトリにデータベースを配置
-    let mut path = std::env::current_exe()
-        .unwrap_or_else(|_| PathBuf::from("."));
-    path.pop(); // 実行ファイル名を削除
-    path.push("plc_data.db");
-    path
+    let path:String=env::var("DB_PATH").unwrap_or("C:\\chiptest.db".to_string());
+    PathBuf::from(path)
 }
 
 /// PLC IDに基づいてテーブルを作成する

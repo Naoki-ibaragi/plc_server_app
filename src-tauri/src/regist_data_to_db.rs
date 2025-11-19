@@ -329,7 +329,7 @@ pub fn regist_uld_pocket_info(conn:&Connection,table_name:&str,machine_name:&str
         TYPE_NAME = excluded.TYPE_NAME,
         ULD_TRAYID = excluded.ULD_TRAYID, 
         ULD_POCKET_X = excluded.ULD_POCKET_X,
-        ULD_POCKET_Y = excluded.ULD_POCKET_X,
+        ULD_POCKET_Y = excluded.ULD_POCKET_Y,
         ULD_POCKET_ALIGN_X = excluded.ULD_POCKET_ALIGN_X,
         ULD_POCKET_ALIGN_Y = excluded.ULD_POCKET_ALIGN_Y;");
 
@@ -352,7 +352,7 @@ pub fn regist_uld_chip_info(conn:&Connection,table_name:&str,machine_name:&str,l
     //lot_name,serialのULD_CHIP_ALIGN_NUMを取得する
     //nullであれば、align_numを0にする、数値であれば+1する
     let get_align_num_sql=
-        format!("SELECT ULD_CHIP_ALIGN_NUM FROM {} WHERE LOT_NAME={} AND SERIAL={}",table_name,lot_name,serial);
+        format!("SELECT ULD_CHIP_ALIGN_NUM FROM {} WHERE LOT_NAME='{}' AND SERIAL={}",table_name,lot_name,serial);
 
     let align_num: i64 = conn.query_row(&get_align_num_sql, [], |row| {
         row.get::<_, Option<i64>>(0)
