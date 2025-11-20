@@ -10,7 +10,10 @@ mod tray;
 mod data_handler;
 mod regist_data_to_db;
 
-use tauri::Manager;
+use tauri::{
+    menu::{Menu,MenuItem,Submenu},
+    Manager,
+};
 use tauri_plugin_single_instance::init as single_instance;
 
 // モジュールからのインポート
