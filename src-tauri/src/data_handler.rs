@@ -41,7 +41,7 @@ pub fn init_database() -> Result<mpsc::UnboundedSender<DbWriteRequest>> {
     let mut db = DB_CONNECTION.lock().unwrap();
     *db = Some(conn);
 
-    println!("Database initialized at: {:?}", db_path);
+    log::info!("Database initialized at: {:?}", db_path);
 
     // DB書き込み専用スレッドを起動し、チャネルの送信側を返す
     let tx = start_db_writer_thread();
@@ -56,14 +56,25 @@ fn start_db_writer_thread() -> Result<mpsc::UnboundedSender<DbWriteRequest>,rusq
 
     // DB書き込み専用スレッドを起動
     std::thread::spawn(move || {
-        println!("DB writer thread started");
+        log::info!("DB writer thread started");
 
         while let Some(request) = rx.blocking_recv() {
+            // 受信データをログ出力
+            log::info!(
+                "Received PLC data - ID: {}, Size: {} bytes",
+                request.plc_id,
+                request.message.len()
+            );
+            log::debug!("PLC data content: {}", request.message);
+
             let table_name = format!("clt_data_{}", request.plc_id);
 
             let db = DB_CONNECTION.lock().unwrap();
             if let Some(conn) = db.as_ref() {
-                conn.execute("BEGIN TRANSACTION",[]);
+                if let Err(e) = conn.execute("BEGIN TRANSACTION",[]) {
+                    log::error!("Failed to begin transaction: {}", e);
+                    continue;
+                }
                 //PLCから受信したjson形式データをhashmapに変換する
                 let recv_data: HashMap<String, Value> = serde_json::from_str(&request.message).unwrap();
                 
@@ -85,16 +96,12 @@ fn start_db_writer_thread() -> Result<mpsc::UnboundedSender<DbWriteRequest>,rusq
                     .and_then(|v| v.as_str())
                     .unwrap_or("unknown");
                 
-                println!("lot_name:{}",lot_name);
-                println!("type_name:{}",type_name);
-                println!("machine_name:{}",machine_name);
-
                 //各ユニット情報の取り出し
                 for (key,value) in &recv_data{
                     if key.contains("U1_TR"){ //LD TRAYデータを登録
                         match regist_u1_tr_info(&conn,&table_name,&machine_name,&lot_name,&type_name,value){
                             Err(e)=>{
-                                println!("regist tray data  error:{}",e);
+                                log::error!("Failed to register tray data: {}", e);
                                 continue;
                             },
                             _=>{}
@@ -107,7 +114,7 @@ fn start_db_writer_thread() -> Result<mpsc::UnboundedSender<DbWriteRequest>,rusq
                         };
                         match regist_arm1_info(&conn,&table_name,&machine_name,&lot_name,&type_name,&unit_name,value){
                             Err(e)=>{
-                                println!("regist arm1 data error:{}",e);
+                                log::error!("Failed to register arm1 data: {}", e);
                                 continue;
                             },
                             _=>{}
@@ -120,7 +127,7 @@ fn start_db_writer_thread() -> Result<mpsc::UnboundedSender<DbWriteRequest>,rusq
                         };
                         match regist_arm2_info(&conn,&table_name,&machine_name,&lot_name,&type_name,&unit_name,value){
                             Err(e)=>{
-                                println!("regist arm2 data error:{}",e);
+                                log::error!("Failed to register arm2 data: {}", e);
                                 continue;
                             },
                             _=>{}
@@ -133,7 +140,7 @@ fn start_db_writer_thread() -> Result<mpsc::UnboundedSender<DbWriteRequest>,rusq
                         };
                         match regist_ph_info(&conn,&table_name,&machine_name,&lot_name,&type_name,&unit_name,value){
                             Err(e)=>{
-                                println!("regist preheat data error:{}",e);
+                                log::error!("Failed to register preheat data: {}", e);
                                 continue;
                             },
                             _=>{}
@@ -146,7 +153,7 @@ fn start_db_writer_thread() -> Result<mpsc::UnboundedSender<DbWriteRequest>,rusq
                         };
                         match regist_ts_info(&conn,&table_name,&machine_name,&lot_name,&type_name,&unit_name,value){
                             Err(e)=>{
-                                println!("regist teststage data error:{}",e);
+                                log::error!("Failed to register teststage data: {}", e);
                                 continue;
                             },
                             _=>{}
@@ -154,7 +161,7 @@ fn start_db_writer_thread() -> Result<mpsc::UnboundedSender<DbWriteRequest>,rusq
                     }else if key.contains("_TS_") && key.contains("U6"){ //IP検査テーブルのデータを登録
                         match regist_ip_ts_info(&conn,&table_name,&machine_name,&lot_name,&type_name,value){
                             Err(e)=>{
-                                println!("regist ph data error:{}",e);
+                                log::error!("Failed to register IP teststage data: {}", e);
                                 continue;
                             },
                             _=>{}
@@ -162,7 +169,7 @@ fn start_db_writer_thread() -> Result<mpsc::UnboundedSender<DbWriteRequest>,rusq
                     }else if key.contains("U6_T1_"){ //IP表面検査のBINデータを登録
                         match regist_ip_surf_info(&conn,&table_name,&machine_name,&lot_name,&type_name,value){
                             Err(e)=>{
-                                println!("regist ph data error:{}",e);
+                                log::error!("Failed to register IP surface data: {}", e);
                                 continue;
                             },
                             _=>{}
@@ -170,7 +177,7 @@ fn start_db_writer_thread() -> Result<mpsc::UnboundedSender<DbWriteRequest>,rusq
                     }else if key.contains("U6_T2_"){ //IP裏面検検のBINデータを登録
                         match regist_ip_back_info(&conn,&table_name,&machine_name,&lot_name,&type_name,value){
                             Err(e)=>{
-                                println!("regist ph data error:{}",e);
+                                log::error!("Failed to register IP back data: {}", e);
                                 continue;
                             },
                             _=>{}
@@ -178,7 +185,7 @@ fn start_db_writer_thread() -> Result<mpsc::UnboundedSender<DbWriteRequest>,rusq
                     }else if key.contains("U7_PI_"){ //ULDポケット認識時のデータを登録
                         match regist_uld_pocket_info(&conn,&table_name,&machine_name,&lot_name,&type_name,value){
                             Err(e)=>{
-                                println!("regist ph data error:{}",e);
+                                log::error!("Failed to register ULD pocket data: {}", e);
                                 continue;
                             },
                             _=>{}
@@ -186,7 +193,7 @@ fn start_db_writer_thread() -> Result<mpsc::UnboundedSender<DbWriteRequest>,rusq
                     }else if key.contains("U7_CI_"){ //ULDポケット挿入時のデータを登録
                         match regist_uld_chip_info(&conn,&table_name,&machine_name,&lot_name,&type_name,value){
                             Err(e)=>{
-                                println!("regist ph data error:{}",e);
+                                log::error!("Failed to register ULD chip data: {}", e);
                                 continue;
                             },
                             _=>{}
@@ -199,18 +206,24 @@ fn start_db_writer_thread() -> Result<mpsc::UnboundedSender<DbWriteRequest>,rusq
                         };
                         match regist_alarm_info(&conn,&table_name,&machine_name,&lot_name,&type_name,&unit_name,value){
                             Err(e)=>{
-                                println!("regist alarm data error:{}",e);
+                                log::error!("Failed to register alarm data: {}", e);
                                 continue;
                             },
                             _=>{}
                         }
                     }
                 }
-                conn.execute("COMMIT",[]);
+                if let Err(e) = conn.execute("COMMIT",[]) {
+                    log::error!("Failed to commit transaction: {}", e);
+                } else {
+                    log::info!("DB write completed for PLC ID: {}", request.plc_id);
+                }
+            } else {
+                log::error!("DB connection not available for PLC ID: {}", request.plc_id);
             }
         }//<-threadの終端
 
-        println!("DB writer thread stopped");
+        log::warn!("DB writer thread stopped");
     });
 
     Ok(tx)
@@ -232,7 +245,7 @@ pub fn create_table_for_plc(plc_id: u32) -> Result<()> {
     let db = DB_CONNECTION.lock().unwrap();
     if let Some(conn) = db.as_ref() {
         conn.execute(&sql, [])?;
-        println!("Table '{}' created or already exists", table_name);
+        log::info!("Table '{}' created or already exists", table_name);
     }
 
     Ok(())
@@ -261,5 +274,5 @@ pub fn save_plc_data(
 pub fn close_database() {
     let mut db = DB_CONNECTION.lock().unwrap();
     *db = None;
-    println!("Database connection closed");
+    log::info!("Database connection closed");
 }
