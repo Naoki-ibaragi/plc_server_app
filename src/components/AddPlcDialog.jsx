@@ -11,6 +11,7 @@ import { X } from "lucide-react";
 export default function AddPlcDialog({ isOpen, onClose, onAdd }) {
   const [formData, setFormData] = useState({
     name: "",
+    table_name: "",
     plc_ip: "",
     plc_port: "",
     pc_ip: "",
@@ -22,6 +23,7 @@ export default function AddPlcDialog({ isOpen, onClose, onAdd }) {
       await onAdd(formData);
       setFormData({
         name: "",
+        table_name: "",
         plc_ip: "",
         plc_port: "",
         pc_ip: "",
@@ -56,6 +58,18 @@ export default function AddPlcDialog({ isOpen, onClose, onAdd }) {
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="w-full px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
               placeholder="例: PLC-5 (検査装置)"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">DBテーブル名</label>
+            <input
+              type="text"
+              value={formData.table_name}
+              onChange={(e) => setFormData({ ...formData, table_name: e.target.value })}
+              className="w-full px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+              placeholder="例: clt_table_1 (DBで使用)"
               required
             />
           </div>

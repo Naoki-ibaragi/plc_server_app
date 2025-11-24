@@ -12,7 +12,9 @@ import { X } from "lucide-react";
  */
 export default function EditPlcDialog({ plc,config,isOpen, onClose, onEdit }) {
   const [formData, setFormData] = useState({
+    id:plc.id,
     name: plc.name,
+    table_name: plc.table_name,
     plc_ip: plc.ip,
     plc_port: plc.port,
     pc_ip: config.pc_ip,
@@ -24,6 +26,7 @@ export default function EditPlcDialog({ plc,config,isOpen, onClose, onEdit }) {
       await onEdit(formData);
       setFormData({
         name: "",
+        table_name: "",
         plc_ip: "",
         plc_port: "",
         pc_ip: "",
@@ -58,6 +61,18 @@ export default function EditPlcDialog({ plc,config,isOpen, onClose, onEdit }) {
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="w-full px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
               placeholder="例: PLC-5 (検査装置)"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">DBテーブル名</label>
+            <input
+              type="text"
+              value={formData.table_name}
+              onChange={(e) => setFormData({ ...formData, table_name: e.target.value })}
+              className="w-full px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+              placeholder="例: clt_table_1"
               required
             />
           </div>
@@ -110,7 +125,7 @@ export default function EditPlcDialog({ plc,config,isOpen, onClose, onEdit }) {
               type="submit"
               className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
             >
-              追加
+              編集
             </button>
           </div>
         </form>

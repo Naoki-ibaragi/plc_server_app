@@ -21,6 +21,7 @@ export default function StackCard() {
         setPlcConfigs(configs);
         const formattedData = configs.map((config) => ({
           id: config.id,
+          table_name: config.table_name,
           name: config.name,
           status: "disconnected",
           ip: config.plc_ip,
@@ -112,6 +113,7 @@ export default function StackCard() {
       // Rust側の接続コマンドを呼び出す
       await invoke("connect_plc", {
         plcId: plc.id,
+        tableName: plc.table_name,
         plcIp: config.plc_ip,
         plcPort: config.plc_port,
         pcIp: config.pc_ip,
@@ -157,6 +159,7 @@ export default function StackCard() {
       // Rust側のPLC追加コマンドを呼び出す
       const newConfig = await invoke("add_plc", {
         name: formData.name,
+        tableName: formData.table_name,
         plcIp: formData.plc_ip,
         plcPort: parseInt(formData.plc_port),
         pcIp: formData.pc_ip,
@@ -175,6 +178,7 @@ export default function StackCard() {
         {
           id: last_item.id,
           name: last_item.name,
+          table_name: last_item.table_name,
           status: "disconnected",
           ip: last_item.plc_ip,
           port: last_item.plc_port,
@@ -195,30 +199,37 @@ export default function StackCard() {
     try {
       // Rust側のPLC情報編集コマンドを呼び出す
       const newConfig = await invoke("edit_plc", {
+        id: formData.id,
         name: formData.name,
+        tableName: formData.table_name,
         plcIp: formData.plc_ip,
         plcPort: parseInt(formData.plc_port),
         pcIp: formData.pc_ip,
       });
 
+      console.log("handleEdit new config",newConfig);
+
       // 設定リストを更新
       setPlcConfigs(newConfig);
 
-      // 表示リストを更新
-      setPlcList(newConfig);
-      setPlcList((prev) => prev.filter((p) =>{
-        if (p.id=formData.id){
-          p.name=formData.name;
-          p.plcIp=formData.plc_ip;
-          p.plcPort=formData.plc_port;
-          p.pcIp=formData.pc_ip;
-          p.pcPort=formData.pc_port;
-        }
-      }));
+      // 表示リストを更新（該当IDのPLCのみ更新し、status/lastReceived/dataは保持）
+      setPlcList((prev) =>
+        prev.map((p) =>
+          p.id === formData.id
+            ? {
+                ...p,
+                name: formData.name,
+                table_name: formData.table_name,
+                ip: formData.plc_ip,
+                port: parseInt(formData.plc_port),
+              }
+            : p
+        )
+      );
 
       alert("編集が完了しました");
     } catch (err) {
-      console.error("Failed to delete PLC:", err);
+      console.error("Failed to edit PLC:", err);
       alert(`編集が失敗しました: ${err}`);
       throw err;
     }

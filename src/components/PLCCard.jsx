@@ -49,40 +49,6 @@ export default function PLCCard({ plc, config,onConnect, onDisconnect, onDelete,
     setIsEditDialogOpen(true);
   };
 
-  // 接続情報編集処理
-  const handleEditPlc = async (formData) => {
-    try {
-      // Rust側のPLC追加コマンドを呼び出す
-      const newConfig = await invoke("add_plc", {
-        name: formData.name,
-        plcIp: formData.plc_ip,
-        plcPort: parseInt(formData.plc_port),
-        pcIp: formData.pc_ip,
-        pcPort: parseInt(formData.pc_port),
-      });
-
-      // 表示リストに追加
-      setPlcList((prev) => [
-        ...prev,
-        {
-          id: newConfig.id,
-          name: newConfig.name,
-          status: "disconnected",
-          ip: newConfig.plc_ip,
-          port: newConfig.plc_port,
-          lastReceived: "-",
-          data: null,
-        },
-      ]);
-
-      alert("PLCを追加しました");
-    } catch (err) {
-      console.error("Failed to add PLC:", err);
-      alert(`PLC追加に失敗しました: ${err}`);
-      throw err;
-    }
-  };
-
   const handleDelete = async (e) => {
     e.stopPropagation();
     if (isConnected) {
@@ -175,6 +141,11 @@ export default function PLCCard({ plc, config,onConnect, onDisconnect, onDelete,
             </div>
 
             <div>
+              <p className="text-sm text-gray-400 mb-1">テーブル名</p>
+              <p className="text-white font-mono">{plc.table_name}</p>
+            </div>
+
+            <div>
               <p className="text-sm text-gray-400 mb-1">最終受信時刻</p>
               <p className="text-white">{plc.lastReceived}</p>
             </div>
@@ -231,7 +202,7 @@ export default function PLCCard({ plc, config,onConnect, onDisconnect, onDelete,
         config={config}
         isOpen={isEditDialogOpen}
         onClose={() => setIsEditDialogOpen(false)}
-        onEdit={handleEditPlc}
+        onEdit={onEdit}
       />
     </div>
   );

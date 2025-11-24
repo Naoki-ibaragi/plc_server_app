@@ -67,6 +67,7 @@ pub fn get_config_path() -> Result<PathBuf, String> {
 #[command]
 pub fn add_plc(
     name:String,
+    table_name:String,
     plc_ip: String,
     plc_port: u16,
     pc_ip: String,
@@ -90,11 +91,71 @@ pub fn add_plc(
     config.plcs.push(
         PlcConfig{
             id:id as u32,
+            table_name:table_name,
             name:name,
             plc_ip:plc_ip,
             plc_port:plc_port,
             pc_ip:pc_ip,
         });
+
+    //jsonに書き込み
+    let mut file = File::create(&config_path)
+        .map_err(|e| format!("Failed to open file for writing: {}", e))?;
+    let json_string = serde_json::to_string_pretty(&config)
+        .expect("構造体をJSONに変換できませんでした");
+
+    // ファイルに書き込み
+    file.write_all(json_string.as_bytes())
+        .map_err(|e| format!("jsonファイルへの書き込み異常: {}", e))?;
+
+    Ok(config.plcs)
+
+}
+
+/// PLCの編集を実施
+#[command]
+pub fn edit_plc(
+    id:u32,
+    name:String,
+    table_name:String,
+    plc_ip: String,
+    plc_port: u16,
+    pc_ip: String,
+)->Result<Vec<PlcConfig>,String>{
+    //config.jsonをパースしたvecに新規のconfigを追加する
+    let config_path = get_config_path()?;
+
+    // デバッグ用: パスを出力
+    println!("Trying to read config from: {:?}", config_path);
+
+    // ファイルを読み込む
+    let config_content = fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to read config file at {:?}: {}", config_path, e))?;
+
+    // JSONをパース
+    let mut config: Config = serde_json::from_str(&config_content)
+        .map_err(|e| format!("Failed to parse config JSON: {}", e))?;
+
+    //config vecのに受け取ったIDのPLC情報を編集
+    println!("Editing PLC with ID: {}", id);
+    let mut found = false;
+    for plc_info in config.plcs.iter_mut(){
+        println!("Checking PLC ID: {}", plc_info.id);
+        if id==plc_info.id{
+            println!("Found matching PLC, updating...");
+            plc_info.name=name.clone();
+            plc_info.table_name=table_name.clone();
+            plc_info.plc_ip=plc_ip.clone();
+            plc_info.plc_port=plc_port;
+            plc_info.pc_ip=pc_ip.clone();
+            found = true;
+            break;  // 該当IDを見つけたらループを抜ける
+        }
+    }
+
+    if !found {
+        return Err(format!("PLC with ID {} not found", id));
+    }
 
     //jsonに書き込み
     let mut file = File::create(&config_path)

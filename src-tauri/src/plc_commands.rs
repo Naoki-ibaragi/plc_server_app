@@ -11,6 +11,7 @@ use crate::data_handler::{create_table_for_plc, save_plc_data};
 #[command]
 pub async fn connect_plc(
     plc_id: u32,
+    table_name: String,
     plc_ip: String,
     plc_port: u16,
     pc_ip: String,
@@ -18,13 +19,14 @@ pub async fn connect_plc(
     db_channel: tauri::State<'_, DbChannelState>,
     app: AppHandle,
 ) -> Result<String, String> {
-     println!("Connecting to PLC ID: {}, IP: {}:{}", plc_id, plc_ip, plc_port);
+     log::info!("Connecting to PLC ID: {}, IP: {}:{}", plc_id, plc_ip, plc_port);
 
     // 既に接続されているかチェック
     {
         let connections = state.lock();
         if let Some(conn) = connections.get(&plc_id) {
             if conn.is_connected {
+                log::warn!("Already connected");
                 return Err("Already connected".to_string());
             }
         }
@@ -36,12 +38,19 @@ pub async fn connect_plc(
 
     let listener = TcpListener::bind(&listen_addr)
         .await
-        .map_err(|e| format!("Failed to bind to {}: {}", listen_addr, e))?;
+        .map_err(|e| {
+            log::error!("Failed to bind to {}: {}", listen_addr, e);
+            format!("Failed to bind to {}: {}", listen_addr, e)
+        })?;
 
     let local_addr = listener.local_addr()
-        .map_err(|e| format!("Failed to get local address: {}", e))?;
+        .map_err(|e| { 
+            log::error!("Failed to get local address: {}", e);
+            format!("Failed to get local address: {}", e)
+        })?;
     let pc_port = local_addr.port();
 
+    log::info!("Listening on {}:{}", pc_ip, pc_port);
     println!("Listening on {}:{}", pc_ip, pc_port);
 
     // PLCに接続を試みる（接続先として）
@@ -61,6 +70,7 @@ pub async fn connect_plc(
             plc_id,
             PlcConnection {
                 plc_id,
+                table_name:table_name.clone(),
                 plc_ip: plc_ip.clone(),
                 plc_port,
                 pc_ip: pc_ip.clone(),
@@ -70,7 +80,7 @@ pub async fn connect_plc(
     }
 
     // PLCごとのテーブルを作成
-    if let Err(e) = create_table_for_plc(plc_id) {
+    if let Err(e) = create_table_for_plc(&table_name) {
         eprintln!("Failed to create table for PLC {}: {}", plc_id, e);
     }
 
@@ -79,7 +89,7 @@ pub async fn connect_plc(
     let state_clone = Arc::clone(&state.inner());
     let db_tx = db_channel.inner().clone();
     tokio::spawn(async move {
-        receive_data_from_plc(plc_id, stream, state_clone, db_tx, app).await;
+        receive_data_from_plc(plc_id, &table_name,stream, state_clone, db_tx, app).await;
     });
 
     Ok(format!("Connected to PLC {}:{}", plc_ip, plc_port))
@@ -88,6 +98,7 @@ pub async fn connect_plc(
 /// PLCからデータを受信する
 async fn receive_data_from_plc(
     plc_id: u32,
+    table_name:&str,
     mut stream: TcpStream,
     state: ConnectionState,
     db_tx: DbChannelState,
@@ -139,7 +150,7 @@ async fn receive_data_from_plc(
                 println!("Received {} bytes from PLC ID {}", n, plc_id);
                 // 受信したデータを処理
                 let received_data = &buffer[..n];
-                process_received_data(plc_id, received_data, &db_tx, &app);
+                process_received_data(plc_id, table_name,received_data, &db_tx, &app);
             }
             Err(e) => {
                 eprintln!("Error reading from PLC ID {}: {}", plc_id, e);
@@ -169,7 +180,7 @@ async fn receive_data_from_plc(
 }
 
 /// 受信したデータを処理する
-fn process_received_data(plc_id: u32, data: &[u8], db_tx: &DbChannelState, app: &AppHandle) {
+fn process_received_data(plc_id: u32, table_name:&str,data: &[u8], db_tx: &DbChannelState, app: &AppHandle) {
     println!("Processing data for PLC ID {}: {:?}", plc_id, data);
 
     // UTF-8としてデコード
@@ -194,19 +205,13 @@ fn process_received_data(plc_id: u32, data: &[u8], db_tx: &DbChannelState, app: 
 
             /*----受信データをデータベースに保存（チャネル経由で送信）---- */
             // 各タスクが独自のクローンを持っているので、ロック不要で高速
-            if let Err(e) = save_plc_data(db_tx, plc_id, &formatted_date, text) {
+            if let Err(e) = save_plc_data(db_tx, plc_id, table_name,&formatted_date, text) {
                 eprintln!("Failed to send data to DB writer for PLC {}: {}", plc_id, e);
             }
 
         }
         Err(e) => {
-            eprintln!("Failed to decode UTF-8 from PLC ID {}: {}", plc_id, e);
-            // デコード失敗時は16進数で表示
-            let hex_string: String = data.iter()
-                .map(|b| format!("{:02X}", b))
-                .collect::<Vec<String>>()
-                .join(" ");
-            println!("Data in hex: {}", hex_string);
+            log::error!("Failed to decode UTF-8 from PLC ID {}: {}", plc_id, e);
         }
     }
 }

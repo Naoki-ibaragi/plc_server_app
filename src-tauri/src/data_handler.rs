@@ -21,6 +21,7 @@ static CREATE_TABLE_SQL:&str = include_str!("sql/create_table.sql");
 #[derive(Debug, Clone)]
 pub struct DbWriteRequest {
     pub plc_id: u32,
+    pub table_name: String,
     pub timestamp: String,
     pub message: String,
 }
@@ -67,7 +68,7 @@ fn start_db_writer_thread() -> Result<mpsc::UnboundedSender<DbWriteRequest>,rusq
             );
             log::debug!("PLC data content: {}", request.message);
 
-            let table_name = format!("clt_data_{}", request.plc_id);
+            let table_name = request.table_name;
 
             let db = DB_CONNECTION.lock().unwrap();
             if let Some(conn) = db.as_ref() {
@@ -238,9 +239,8 @@ fn get_database_path() -> PathBuf {
 
 /// PLC IDに基づいてテーブルを作成する
 /// テーブル名: plc_data_{plc_id}
-pub fn create_table_for_plc(plc_id: u32) -> Result<()> {
-    let table_name = format!("clt_data_{}", plc_id);
-    let sql=CREATE_TABLE_SQL.replace("{TABLE_NAME}",&table_name);
+pub fn create_table_for_plc(table_name: &str) -> Result<()> {
+    let sql=CREATE_TABLE_SQL.replace("{TABLE_NAME}",table_name);
 
     let db = DB_CONNECTION.lock().unwrap();
     if let Some(conn) = db.as_ref() {
@@ -256,11 +256,13 @@ pub fn create_table_for_plc(plc_id: u32) -> Result<()> {
 pub fn save_plc_data(
     tx: &mpsc::UnboundedSender<DbWriteRequest>,
     plc_id: u32,
+    table_name:&str,
     timestamp: &str,
     message: &str,
 ) -> Result<(), String> {
     let request = DbWriteRequest {
-        plc_id,
+        plc_id:plc_id,
+        table_name:table_name.to_string(),
         timestamp: timestamp.to_string(),
         message: message.to_string(),
     };

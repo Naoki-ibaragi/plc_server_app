@@ -14,6 +14,7 @@ pub struct SocketData {
 pub struct PlcConfig {
     pub id: u32,
     pub name: String,
+    pub table_name: String,
     pub plc_ip: String,
     pub plc_port: u16,
     pub pc_ip: String,
@@ -29,6 +30,7 @@ pub struct Config {
 #[derive(Debug, Clone)]
 pub struct PlcConnection {
     pub plc_id: u32,
+    pub table_name:String,
     pub plc_ip: String,
     pub plc_port: u16,
     pub pc_ip: String,

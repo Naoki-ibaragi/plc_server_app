@@ -12,6 +12,8 @@
     "core:window:default",
     "core:event:allow-emit",
     "core:event:allow-listen",
-    "core:event:allow-unlisten"
+    "core:event:allow-unlisten",
+    "dialog:allow-message",
+    "dialog:default"
   ]
 }

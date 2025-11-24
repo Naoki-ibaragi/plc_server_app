@@ -15,11 +15,11 @@ use tauri::{
 };
 use tauri::menu::MenuBuilder;
 use tauri_plugin_dialog::{DialogExt,MessageDialogKind};
-use tauri_plugin_log::{Target,TargetKind};
+use tauri_plugin_log::{fern, Target, TargetKind};
 use tauri_plugin_single_instance::init as single_instance;
 
 // モジュールからのインポート
-use config::{init_socket, add_plc, delete_plc};
+use config::{init_socket, add_plc, edit_plc, delete_plc};
 use plc_commands::{connect_plc, disconnect_plc};
 use state::init_connection_state;
 use data_handler::init_database;
@@ -36,22 +36,24 @@ fn main() {
         }
     };
 
-
     tauri::Builder::default()
         .manage(connection_state)
         .manage(db_channel) // DB チャネルを状態として管理
-        .invoke_handler(tauri::generate_handler![init_socket, connect_plc, disconnect_plc, add_plc, delete_plc])
+        .invoke_handler(tauri::generate_handler![init_socket, connect_plc, disconnect_plc, add_plc, edit_plc, delete_plc])
         .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_log::Builder::new()
                 .targets([
                     Target::new(TargetKind::Stdout),
-                    Target::new(TargetKind::LogDir { file_name: None }),
+                    Target::new(TargetKind::Dispatch(
+                        fern::Dispatch::new().chain(
+                            fern::DateBased::new("logs/", "%Y-%m-%d.log")
+                        )
+                    )),
                 ])
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
                 .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
                 .level(log::LevelFilter::Debug)
-                .max_file_size(10_000_000) // 10MB
                 .build(),
         )
         .plugin(single_instance(|app, _args, _cwd| {
@@ -62,6 +64,11 @@ fn main() {
             }
         }))
         .setup(|app| {
+            // ログディレクトリを作成
+            if let Err(e) = std::fs::create_dir_all("logs") {
+                eprintln!("Failed to create logs directory: {}", e);
+            }
+
             // トレイアイコンをセットアップ
             tray::setup_tray_icon(app)?;
             log::info!("アプリを起動しました");
