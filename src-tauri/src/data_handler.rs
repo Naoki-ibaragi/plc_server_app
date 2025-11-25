@@ -29,7 +29,8 @@ pub struct DbWriteRequest {
 /// データベースを初期化し、DB書き込み専用スレッドを起動する
 /// チャネルの送信側を返すので、各スレッドで clone して使用する
 pub fn init_database() -> Result<mpsc::UnboundedSender<DbWriteRequest>> {
-    let db_path = get_database_path();
+    let path:String=env::var("DB_PATH").unwrap_or("C:\\Users\\takahashi\\Desktop\\chiptest.db".to_string());
+    let db_path=PathBuf::from(path);
 
     // ディレクトリが存在しない場合は作成
     if let Some(parent) = db_path.parent() {
@@ -230,12 +231,6 @@ fn start_db_writer_thread() -> Result<mpsc::UnboundedSender<DbWriteRequest>,rusq
     Ok(tx)
 }
 
-/// データベースのパスを取得
-fn get_database_path() -> PathBuf {
-    // 実行ファイルのディレクトリにデータベースを配置
-    let path:String=env::var("DB_PATH").unwrap_or("C:\\chiptest.db".to_string());
-    PathBuf::from(path)
-}
 
 /// PLC IDに基づいてテーブルを作成する
 /// テーブル名: plc_data_{plc_id}
