@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState,useEffect } from "react";
 import { X } from "lucide-react";
 
 /**
@@ -20,17 +20,23 @@ export default function EditPlcDialog({ plc,config,isOpen, onClose, onEdit }) {
     pc_ip: config.pc_ip,
   });
 
+  useEffect(() => {
+    if (plc && config) {
+      setFormData({
+        id: plc.id,
+        name: plc.name,
+        table_name: plc.table_name,
+        plc_ip: plc.ip,
+        plc_port: plc.port,
+        pc_ip: config.pc_ip,
+      });
+    }
+  }, [plc, config]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       await onEdit(formData);
-      setFormData({
-        name: "",
-        table_name: "",
-        plc_ip: "",
-        plc_port: "",
-        pc_ip: "",
-      });
       onClose();
     } catch (error) {
       console.error("Failed to add PLC:", error);

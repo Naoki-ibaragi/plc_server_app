@@ -371,7 +371,7 @@ pub fn regist_uld_chip_info(conn:&Connection,table_name:&str,machine_name:&str,l
         MACHINE_NAME = excluded.MACHINE_NAME,
         TYPE_NAME = excluded.TYPE_NAME,
         ULD_POCKET_X = excluded.ULD_POCKET_X,
-        ULD_POCKET_Y = excluded.ULD_POCKET_X,
+        ULD_POCKET_Y = excluded.ULD_POCKET_Y,
         ULD_CHIP_ALIGN_X = excluded.ULD_CHIP_ALIGN_X,
         ULD_CHIP_ALIGN_Y = excluded.ULD_CHIP_ALIGN_Y,
         ULD_PUT_DATE = excluded.ULD_PUT_DATE,

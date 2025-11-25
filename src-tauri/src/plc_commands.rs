@@ -34,7 +34,7 @@ pub async fn connect_plc(
 
     // PCのポートでリッスンを開始（ポート番号0で自動割り当て）
     let listen_addr = format!("{}:0", pc_ip);
-    println!("Trying to listen on: {} (auto-assign port)", listen_addr);
+    log::info!("Trying to listen on: {} (auto-assign port)", listen_addr);
 
     let listener = TcpListener::bind(&listen_addr)
         .await
@@ -51,17 +51,16 @@ pub async fn connect_plc(
     let pc_port = local_addr.port();
 
     log::info!("Listening on {}:{}", pc_ip, pc_port);
-    println!("Listening on {}:{}", pc_ip, pc_port);
 
     // PLCに接続を試みる（接続先として）
     let plc_addr = format!("{}:{}", plc_ip, plc_port);
-    println!("Trying to connect to PLC at: {}", plc_addr);
+    log::info!("Trying to connect to PLC at: {}", plc_addr);
 
     let stream = TcpStream::connect(&plc_addr)
         .await
         .map_err(|e| format!("Failed to connect to PLC at {}: {}", plc_addr, e))?;
 
-    println!("Connected to PLC at {}", plc_addr);
+    log::info!("Connected to PLC at {}", plc_addr);
 
     // 接続情報を保存
     {
