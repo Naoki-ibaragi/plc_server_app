@@ -5,7 +5,7 @@ use tokio::io::AsyncReadExt;
 use crate::types::PlcConnection;
 use crate::state::{ConnectionState, DbChannelState};
 use chrono::{DateTime, Utc};
-use crate::data_handler::{create_table_for_plc, save_plc_data};
+use crate::data_handler::{create_chipdata_table, ensure_current_partitions, save_plc_data};
 
 /// PLCに接続する(フロントエンドから呼び出し)
 #[command]
@@ -78,9 +78,14 @@ pub async fn connect_plc(
         );
     }
 
-    // PLCごとのテーブルを作成
-    if let Err(e) = create_table_for_plc(&table_name) {
-        eprintln!("Failed to create table for PLC {}: {}", plc_id, e);
+    // CHIPDATAパーティションテーブルを作成（初回のみ）
+    if let Err(e) = create_chipdata_table().await {
+        log::error!("Failed to create CHIPDATA table: {}", e);
+    }
+
+    // 現在月と次月のパーティションを確保
+    if let Err(e) = ensure_current_partitions().await {
+        log::error!("Failed to ensure partitions: {}", e);
     }
 
     // 受信ループを別のタスクで実行

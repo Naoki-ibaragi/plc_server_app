@@ -3,7 +3,7 @@ use rusqlite::{Connection, Result,params};
 use tokio::net::tcp::ReuniteError;
 
 //LDトレイピックアップ情報をDBに挿入するためのsql文を生成
-pub fn regist_u1_tr_info(conn:&Connection,table_name:&str,machine_name:&str,lot_name:&str,type_name:&str,value:&Value)->Result<(),rusqlite::Error>{
+pub fn regist_u1_tr_info(conn:&Connection,table_name:&str,machine_id:&u32,lot_name:&str,type_name:&str,value:&Value)->Result<(),rusqlite::Error>{
     //pf,serial,arm_pos,tpx,tpy,tpax,tpayを抜き出す
     let hash_map=value.as_object().unwrap();
     let serial=hash_map.get("serial").and_then(|v| v.as_i64()).unwrap_or(0);             //シリアル番号
@@ -20,13 +20,13 @@ pub fn regist_u1_tr_info(conn:&Connection,table_name:&str,machine_name:&str,lot_
 
         // SQL文字列をformat!で構築
     let sql = format!(
-        "INSERT INTO {table_name} (MACHINE_NAME, TYPE_NAME, LOT_NAME, SERIAL, 
+        "INSERT INTO {table_name} (MACHINE_ID, TYPE_NAME, LOT_NAME, SERIAL, 
         WANO, WAX, WAY, LD_PICKUP_DATE, LD_TRAYID, LD_TRAY_ARM, 
         LD_TRAY_POCKET_X, LD_TRAY_POCKET_Y, LD_TRAY_ALIGN_X, LD_TRAY_ALIGN_Y)
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
         ON CONFLICT(lot_name, serial)
         DO UPDATE SET 
-        MACHINE_NAME = excluded.MACHINE_NAME, 
+        MACHINE_ID = excluded.MACHINE_ID, 
         TYPE_NAME = excluded.TYPE_NAME, 
         WANO = excluded.WANO, 
         WAX = excluded.WAX, 
@@ -39,12 +39,12 @@ pub fn regist_u1_tr_info(conn:&Connection,table_name:&str,machine_name:&str,lot_
         LD_TRAY_ALIGN_X = excluded.LD_TRAY_ALIGN_X,
         LD_TRAY_ALIGN_Y = excluded.LD_TRAY_ALIGN_Y;");
 
-    conn.execute(&sql, params![machine_name,type_name,lot_name,serial,wano,wax,way,date,trayid,trayarm,px,py,pax,pay])?;
+    conn.execute(&sql, params![machine_id,type_name,lot_name,serial,wano,wax,way,date,trayid,trayarm,px,py,pax,pay])?;
     Ok(()) 
 
 }
 
-pub fn regist_arm1_info(conn:&Connection,table_name:&str,machine_name:&str,lot_name:&str,type_name:&str,unit_name:&str,value:&Value)->Result<(),rusqlite::Error>{
+pub fn regist_arm1_info(conn:&Connection,table_name:&str,machine_id:&u32,lot_name:&str,type_name:&str,unit_name:&str,value:&Value)->Result<(),rusqlite::Error>{
     //pf,serial,arm_pos,tpx,tpy,tpax,tpayを抜き出す
     let hash_map=value.as_object().unwrap();
     let serial=hash_map.get("serial").and_then(|v| v.as_i64()).unwrap_or(0);
@@ -65,20 +65,20 @@ pub fn regist_arm1_info(conn:&Connection,table_name:&str,machine_name:&str,lot_n
 
     // SQL文字列をformat!で構築
     let sql = format!(
-        "INSERT INTO {table_name} (MACHINE_NAME, TYPE_NAME, LOT_NAME, SERIAL, {column})
+        "INSERT INTO {table_name} (MACHINE_ID, TYPE_NAME, LOT_NAME, SERIAL, {column})
         VALUES (?1, ?2, ?3, ?4, ?5)
         ON CONFLICT(lot_name, serial)
          DO UPDATE SET 
-         MACHINE_NAME = excluded.MACHINE_NAME, 
+         MACHINE_ID = excluded.MACHINE_ID, 
          TYPE_NAME = excluded.TYPE_NAME, 
          {column} = excluded.{column};");
 
-    conn.execute(&sql, params![machine_name,type_name,lot_name, serial, count])?;
+    conn.execute(&sql, params![machine_id,type_name,lot_name, serial, count])?;
     Ok(())
 
 }
 
-pub fn regist_arm2_info(conn:&Connection,table_name:&str,machine_name:&str,lot_name:&str,type_name:&str,unit_name:&str,value:&Value)->Result<(),rusqlite::Error>{
+pub fn regist_arm2_info(conn:&Connection,table_name:&str,machine_id:&u32,lot_name:&str,type_name:&str,unit_name:&str,value:&Value)->Result<(),rusqlite::Error>{
     //pf,serial,arm_pos,tpx,tpy,tpax,tpayを抜き出す
     let hash_map=value.as_object().unwrap();
     let serial=hash_map.get("serial").and_then(|v| v.as_i64()).unwrap_or(0);
@@ -99,21 +99,21 @@ pub fn regist_arm2_info(conn:&Connection,table_name:&str,machine_name:&str,lot_n
 
     // SQL文字列をformat!で構築
     let sql = format!(
-        "INSERT INTO {table_name} (MACHINE_NAME, TYPE_NAME, LOT_NAME, SERIAL, {column})
+        "INSERT INTO {table_name} (MACHINE_ID, TYPE_NAME, LOT_NAME, SERIAL, {column})
         VALUES (?1, ?2, ?3, ?4, ?5)
         ON CONFLICT(lot_name, serial)
          DO UPDATE SET 
-         MACHINE_NAME = excluded.MACHINE_NAME, 
+         MACHINE_ID = excluded.MACHINE_ID, 
          TYPE_NAME = excluded.TYPE_NAME, 
          {column} = excluded.{column};");
 
-    conn.execute(&sql, params![machine_name,type_name,lot_name, serial, count])?;
+    conn.execute(&sql, params![machine_id,type_name,lot_name, serial, count])?;
     Ok(())
 
 }
 
 
-pub fn regist_ph_info(conn:&Connection,table_name:&str,machine_name:&str,lot_name:&str,type_name:&str,unit_name:&str,value:&Value)->Result<(),rusqlite::Error>{
+pub fn regist_ph_info(conn:&Connection,table_name:&str,machine_id:&u32,lot_name:&str,type_name:&str,unit_name:&str,value:&Value)->Result<(),rusqlite::Error>{
     //pf,serial,arm_pos,tpx,tpy,tpax,tpayを抜き出す
     let hash_map=value.as_object().unwrap();
     let serial=hash_map.get("serial").and_then(|v| v.as_i64()).unwrap_or(0);
@@ -133,24 +133,24 @@ pub fn regist_ph_info(conn:&Connection,table_name:&str,machine_name:&str,lot_nam
 
     // SQL文字列をformat!で構築
     let sql = format!(
-        "INSERT INTO {table_name} (MACHINE_NAME, TYPE_NAME, LOT_NAME, SERIAL, {c1}, {c2}, {c3})
+        "INSERT INTO {table_name} (MACHINE_ID, TYPE_NAME, LOT_NAME, SERIAL, {c1}, {c2}, {c3})
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
         ON CONFLICT(lot_name, serial)
          DO UPDATE SET 
-         MACHINE_NAME = excluded.MACHINE_NAME, 
+         MACHINE_ID = excluded.MACHINE_ID, 
          TYPE_NAME = excluded.TYPE_NAME, 
          {c1} = excluded.{c1}, 
          {c2} = excluded.{c2}, 
          {c3} = excluded.{c3};");
 
     //DBに登録
-    conn.execute(&sql, params![machine_name,type_name,lot_name, serial, ax,ay,at])?;
+    conn.execute(&sql, params![machine_id,type_name,lot_name, serial, ax,ay,at])?;
 
     Ok(())
 
 }
 
-pub fn regist_ts_info(conn:&Connection,table_name:&str,machine_name:&str,lot_name:&str,type_name:&str,unit_name:&str,value:&Value)->Result<(),rusqlite::Error>{
+pub fn regist_ts_info(conn:&Connection,table_name:&str,machine_id:&u32,lot_name:&str,type_name:&str,unit_name:&str,value:&Value)->Result<(),rusqlite::Error>{
     //pf,serial,arm_pos,tpx,tpy,tpax,tpayを抜き出す
     let hash_map=value.as_object().unwrap();
     let serial=hash_map.get("serial").and_then(|v| v.as_i64()).unwrap_or(0);
@@ -196,12 +196,12 @@ pub fn regist_ts_info(conn:&Connection,table_name:&str,machine_name:&str,lot_nam
 
     // SQL文字列をformat!で構築
     let sql = format!(
-        "INSERT INTO {table_name} (MACHINE_NAME, TYPE_NAME, LOT_NAME, SERIAL, 
+        "INSERT INTO {table_name} (MACHINE_ID, TYPE_NAME, LOT_NAME, SERIAL, 
         {c1}, {c2}, {c3},{c4},{c5},{c6},{c7},{c8},{c9},{c10},{c11},{c12},{c13},{c14})
         VALUES (?1, ?2, ?3, ?4, ?5, ?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)
         ON CONFLICT(lot_name, serial)
          DO UPDATE SET 
-         MACHINE_NAME=excluded.MACHINE_NAME,
+         MACHINE_ID=excluded.MACHINE_ID,
          TYPE_NAME=excluded.TYPE_NAME,
          {c1} = excluded.{c1}, 
          {c2} = excluded.{c2}, 
@@ -222,7 +222,7 @@ pub fn regist_ts_info(conn:&Connection,table_name:&str,machine_name:&str,lot_nam
     conn.execute(
         &sql, 
         params![
-        machine_name,
+        machine_id,
         type_name,
         lot_name, 
         serial, 
@@ -247,7 +247,7 @@ pub fn regist_ts_info(conn:&Connection,table_name:&str,machine_name:&str,lot_nam
 
 }
 
-pub fn regist_ip_ts_info(conn:&Connection,table_name:&str,machine_name:&str,lot_name:&str,type_name:&str,value:&Value)->Result<(),rusqlite::Error>{
+pub fn regist_ip_ts_info(conn:&Connection,table_name:&str,machine_id:&u32,lot_name:&str,type_name:&str,value:&Value)->Result<(),rusqlite::Error>{
     //pf,serial,arm_pos,tpx,tpy,tpax,tpayを抜き出す
     let hash_map=value.as_object().unwrap();
     let serial=hash_map.get("serial").and_then(|v| v.as_i64()).unwrap_or(0);
@@ -255,19 +255,19 @@ pub fn regist_ip_ts_info(conn:&Connection,table_name:&str,machine_name:&str,lot_
 
     // SQL文字列をformat!で構築
     let sql = 
-        format!("INSERT INTO {table_name} (MACHINE_NAME, TYPE_NAME, LOT_NAME, SERIAL, IP_STAGE_COUNT)
+        format!("INSERT INTO {table_name} (MACHINE_ID, TYPE_NAME, LOT_NAME, SERIAL, IP_STAGE_COUNT)
         VALUES (?1, ?2, ?3, ?4, ?5)
         ON CONFLICT(lot_name, serial)
          DO UPDATE SET 
-         MACHINE_NAME = excluded.MACHINE_NAME, 
+         MACHINE_ID = excluded.MACHINE_ID, 
          TYPE_NAME = excluded.TYPE_NAME, 
          IP_STAGE_COUNT = excluded.IP_STAGE_COUNT;");
 
-    conn.execute(&sql, params![machine_name,type_name,lot_name, serial, stage_count])?;
+    conn.execute(&sql, params![machine_id,type_name,lot_name, serial, stage_count])?;
     Ok(())
 }
 
-pub fn regist_ip_surf_info(conn:&Connection,table_name:&str,machine_name:&str,lot_name:&str,type_name:&str,value:&Value)->Result<(),rusqlite::Error>{
+pub fn regist_ip_surf_info(conn:&Connection,table_name:&str,machine_id:&u32,lot_name:&str,type_name:&str,value:&Value)->Result<(),rusqlite::Error>{
     //pf,serial,arm_pos,tpx,tpy,tpax,tpayを抜き出す
     let hash_map=value.as_object().unwrap();
     let serial=hash_map.get("serial").and_then(|v| v.as_i64()).unwrap_or(0);
@@ -275,19 +275,19 @@ pub fn regist_ip_surf_info(conn:&Connection,table_name:&str,machine_name:&str,lo
 
     // SQL文字列をformat!で構築
     let sql = 
-        format!("INSERT INTO {table_name} (MACHINE_NAME, TYPE_NAME, LOT_NAME, SERIAL, IP_SURF_BIN)
+        format!("INSERT INTO {table_name} (MACHINE_ID, TYPE_NAME, LOT_NAME, SERIAL, IP_SURF_BIN)
         VALUES (?1, ?2, ?3, ?4, ?5)
         ON CONFLICT(lot_name, serial)
          DO UPDATE SET 
-         MACHINE_NAME = excluded.MACHINE_NAME, 
+         MACHINE_ID = excluded.MACHINE_ID, 
          TYPE_NAME = excluded.TYPE_NAME, 
          IP_SURF_BIN = excluded.IP_SURF_BIN;");
 
-    conn.execute(&sql, params![machine_name,type_name,lot_name, serial, bin])?;
+    conn.execute(&sql, params![machine_id,type_name,lot_name, serial, bin])?;
     Ok(())
 }
 
-pub fn regist_ip_back_info(conn:&Connection,table_name:&str,machine_name:&str,lot_name:&str,type_name:&str,value:&Value)->Result<(),rusqlite::Error>{
+pub fn regist_ip_back_info(conn:&Connection,table_name:&str,machine_id:&u32,lot_name:&str,type_name:&str,value:&Value)->Result<(),rusqlite::Error>{
     //pf,serial,arm_pos,tpx,tpy,tpax,tpayを抜き出す
     let hash_map=value.as_object().unwrap();
     let serial=hash_map.get("serial").and_then(|v| v.as_i64()).unwrap_or(0);
@@ -295,20 +295,20 @@ pub fn regist_ip_back_info(conn:&Connection,table_name:&str,machine_name:&str,lo
 
     // SQL文字列をformat!で構築
     let sql = 
-        format!("INSERT INTO {table_name} (MACHINE_NAME, TYPE_NAME, LOT_NAME, SERIAL, IP_BACK_BIN)
+        format!("INSERT INTO {table_name} (MACHINE_ID, TYPE_NAME, LOT_NAME, SERIAL, IP_BACK_BIN)
         VALUES (?1, ?2, ?3, ?4, ?5)
         ON CONFLICT(lot_name, serial)
          DO UPDATE SET 
-         MACHINE_NAME = excluded.MACHINE_NAME, 
+         MACHINE_ID = excluded.MACHINE_ID, 
          TYPE_NAME = excluded.TYPE_NAME, 
          IP_BACk_BIN = excluded.IP_BACK_BIN;");
 
-    conn.execute(&sql, params![machine_name,type_name,lot_name, serial, bin])?;
+    conn.execute(&sql, params![machine_id,type_name,lot_name, serial, bin])?;
     Ok(())
 }
 
 //ULDポケットアライメント情報をDBに登録
-pub fn regist_uld_pocket_info(conn:&Connection,table_name:&str,machine_name:&str,lot_name:&str,type_name:&str,value:&Value)->Result<(),rusqlite::Error>{
+pub fn regist_uld_pocket_info(conn:&Connection,table_name:&str,machine_id:&u32,lot_name:&str,type_name:&str,value:&Value)->Result<(),rusqlite::Error>{
     //pf,serial,arm_pos,tpx,tpy,tpax,tpayを抜き出す
     let hash_map=value.as_object().unwrap();
     let serial=hash_map.get("serial").and_then(|v| v.as_i64()).unwrap_or(0);             //シリアル番号
@@ -320,12 +320,12 @@ pub fn regist_uld_pocket_info(conn:&Connection,table_name:&str,machine_name:&str
 
         // SQL文字列をformat!で構築
     let sql = 
-        format!("INSERT INTO {table_name} (MACHINE_NAME, TYPE_NAME, LOT_NAME, SERIAL, 
+        format!("INSERT INTO {table_name} (MACHINE_ID, TYPE_NAME, LOT_NAME, SERIAL, 
         ULD_TRAYID, ULD_POCKET_X, ULD_POCKET_Y, ULD_POCKET_ALIGN_X, ULD_POCKET_ALIGN_Y)
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
         ON CONFLICT(lot_name, serial)
         DO UPDATE SET 
-        MACHINE_NAME = excluded.MACHINE_NAME,
+        MACHINE_ID = excluded.MACHINE_ID,
         TYPE_NAME = excluded.TYPE_NAME,
         ULD_TRAYID = excluded.ULD_TRAYID, 
         ULD_POCKET_X = excluded.ULD_POCKET_X,
@@ -333,13 +333,13 @@ pub fn regist_uld_pocket_info(conn:&Connection,table_name:&str,machine_name:&str
         ULD_POCKET_ALIGN_X = excluded.ULD_POCKET_ALIGN_X,
         ULD_POCKET_ALIGN_Y = excluded.ULD_POCKET_ALIGN_Y;");
 
-    conn.execute(&sql, params![machine_name,type_name,lot_name,serial,trayid,px,py,pax,pay])?;
+    conn.execute(&sql, params![machine_id,type_name,lot_name,serial,trayid,px,py,pax,pay])?;
     Ok(()) 
 
 }
 
 //ULD挿入後チップアライメント情報をDBに登録
-pub fn regist_uld_chip_info(conn:&Connection,table_name:&str,machine_name:&str,lot_name:&str,type_name:&str,value:&Value)->Result<(),rusqlite::Error>{
+pub fn regist_uld_chip_info(conn:&Connection,table_name:&str,machine_id:&u32,lot_name:&str,type_name:&str,value:&Value)->Result<(),rusqlite::Error>{
     //pf,serial,arm_pos,tpx,tpy,tpax,tpayを抜き出す
     let hash_map=value.as_object().unwrap();
     let serial=hash_map.get("serial").and_then(|v| v.as_i64()).unwrap_or(0);             //シリアル番号
@@ -363,12 +363,12 @@ pub fn regist_uld_chip_info(conn:&Connection,table_name:&str,machine_name:&str,l
 
     // SQL文字列をformat!で構築
     let sql = 
-        format!("INSERT INTO {table_name} (MACHINE_NAME, TYPE_NAME, LOT_NAME, SERIAL, 
+        format!("INSERT INTO {table_name} (MACHINE_ID, TYPE_NAME, LOT_NAME, SERIAL, 
         ULD_POCKET_X, ULD_POCKET_Y, ULD_CHIP_ALIGN_X, ULD_CHIP_ALIGN_Y,ULD_PUT_DATE,ULD_CHIP_ALIGN_NUM)
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
         ON CONFLICT(lot_name, serial)
         DO UPDATE SET 
-        MACHINE_NAME = excluded.MACHINE_NAME,
+        MACHINE_ID = excluded.MACHINE_ID,
         TYPE_NAME = excluded.TYPE_NAME,
         ULD_POCKET_X = excluded.ULD_POCKET_X,
         ULD_POCKET_Y = excluded.ULD_POCKET_Y,
@@ -377,12 +377,12 @@ pub fn regist_uld_chip_info(conn:&Connection,table_name:&str,machine_name:&str,l
         ULD_PUT_DATE = excluded.ULD_PUT_DATE,
         ULD_CHIP_ALIGN_NUM = excluded.ULD_CHIP_ALIGN_NUM;");
 
-    conn.execute(&sql, params![machine_name,type_name,lot_name,serial,px,py,cax,cay,date,align_num])?;
+    conn.execute(&sql, params![machine_id,type_name,lot_name,serial,px,py,cax,cay,date,align_num])?;
     Ok(()) 
 
 }
 
-pub fn regist_alarm_info(conn:&Connection,table_name:&str,machine_name:&str,lot_name:&str,type_name:&str,unit_name:&str,value:&Value)->Result<(),rusqlite::Error>{
+pub fn regist_alarm_info(conn:&Connection,table_name:&str,machine_id:&u32,lot_name:&str,type_name:&str,unit_name:&str,value:&Value)->Result<(),rusqlite::Error>{
     let hash_map=value.as_object().unwrap();
     let alarm_num=hash_map.get("alarm_num").and_then(|v| v.as_i64()).unwrap_or(0);
 
@@ -422,15 +422,15 @@ pub fn regist_alarm_info(conn:&Connection,table_name:&str,machine_name:&str,lot_
 
     // SQL文字列をformat!で構築
     let sql =
-        format!("INSERT INTO {table_name} (MACHINE_NAME, TYPE_NAME, LOT_NAME, SERIAL, {column})
+        format!("INSERT INTO {table_name} (MACHINE_ID, TYPE_NAME, LOT_NAME, SERIAL, {column})
         VALUES (?1, ?2, ?3, ?4, ?5)
         ON CONFLICT(lot_name, serial)
          DO UPDATE SET
-         MACHINE_NAME = excluded.MACHINE_NAME,
+         MACHINE_ID = excluded.MACHINE_ID,
          TYPE_NAME = excluded.TYPE_NAME,
          {column} = excluded.{column};");
 
-    conn.execute(&sql, params![machine_name,type_name,lot_name, serial, alarm_num])?;
+    conn.execute(&sql, params![machine_id,type_name,lot_name, serial, alarm_num])?;
     Ok(())
 }
 

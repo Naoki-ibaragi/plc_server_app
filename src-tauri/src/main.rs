@@ -8,7 +8,8 @@ mod config;
 mod plc_commands;
 mod tray;
 mod data_handler;
-mod regist_data_to_db;
+// TODO: regist_data_to_db.rsをsqlx対応に書き換え後に有効化
+// mod regist_data_to_db;
 
 use tauri::{
     Manager,
@@ -27,14 +28,16 @@ use data_handler::init_database;
 fn main() {
     let connection_state = init_connection_state();
 
-    // データベースを初期化し、チャネルの送信側を取得
-    let db_channel = match init_database() {
-        Ok(tx) => tx,
-        Err(e) => {
-            eprintln!("Failed to initialize database: {}", e);
-            std::process::exit(1);
+    // データベースを初期化し、チャネルの送信側を取得（非同期）
+    let db_channel = tauri::async_runtime::block_on(async {
+        match init_database().await {
+            Ok(tx) => tx,
+            Err(e) => {
+                eprintln!("Failed to initialize database: {}", e);
+                std::process::exit(1);
+            }
         }
-    };
+    });
 
     tauri::Builder::default()
         .manage(connection_state)
