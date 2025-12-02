@@ -14,6 +14,7 @@ pub fn setup_tray_icon(app: &App) -> Result<()> {
     // トレイアイコンを作成
     TrayIconBuilder::new()
         .icon(app.default_window_icon().unwrap().clone())
+        .tooltip("PLCデータ受信アプリ")
         .menu(&menu)
         .on_menu_event(on_menu_event)
         .on_tray_icon_event(on_tray_icon_event)
