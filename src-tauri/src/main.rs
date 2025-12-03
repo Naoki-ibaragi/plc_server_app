@@ -8,8 +8,7 @@ mod config;
 mod plc_commands;
 mod tray;
 mod data_handler;
-// TODO: regist_data_to_db.rsをsqlx対応に書き換え後に有効化
-// mod regist_data_to_db;
+mod regist_data_to_db;
 
 use tauri::{
     Manager,

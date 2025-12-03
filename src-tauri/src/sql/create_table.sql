@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS CHIPDATA (
 	wano				INTEGER,
 	wax					INTEGER,
 	way					INTEGER,
-	ld_pickup_date		DATE NOT NULL,
+	ld_pickup_date		TIMESTAMP NOT NULL,
 	ld_trayid			VARCHAR,
 	ld_tray_arm			VARCHAR,
 	ld_tray_pocket_x	INTEGER,
@@ -106,14 +106,14 @@ CREATE TABLE IF NOT EXISTS CHIPDATA (
 	uld_pocket_align_x	INTEGER,
 	uld_pocket_align_y	INTEGER,
 	uld_arm1_collet		INTEGER,
-	uld_put_date		DATE,
+	uld_put_date		TIMESTAMP,
 	uld_chip_align_x	INTEGER,
 	uld_chip_align_y	INTEGER,
 	uld_chip_align_num	INTEGER,
 	uld_alarm			INTEGER,
 	PRIMARY KEY (id, ld_pickup_date, machine_id),
 	CONSTRAINT uix_lot_serial UNIQUE (lot_name, serial, ld_pickup_date, machine_id)
-) PARTITION BY RANGE (ld_pickup_date);
+) PARTITION BY RANGE (DATE(ld_pickup_date));
 
 -- インデックス作成
 CREATE INDEX IF NOT EXISTS idx_chipdata_machine_id ON CHIPDATA (machine_id);
