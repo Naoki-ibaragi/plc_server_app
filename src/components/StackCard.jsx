@@ -46,32 +46,62 @@ export default function StackCard() {
 
           // nullや空データの場合は更新しない(切断時に無効なデータが送られてくる場合があるため)
           if (!message || message === "" || (typeof message === 'object' && Object.keys(message).length === 0)) {
-            console.log(`PLC ${plc_id}: 空またはnullのデータを受信したためスキップ`);
+            console.log(`[MESSAGE] PLC ${plc_id}: 空またはnullのデータを受信したためスキップ`);
             return;
           }
 
+          console.log(`[MESSAGE] PLC ${plc_id} received data at ${timestamp}`);
+
           //対象のplc_idのplcListのlastReceivedをmessageで更新
-          setPlcList((prev) =>
-            prev.map((p) =>
+          setPlcList((prev) => {
+            const targetPlc = prev.find(p => p.id === plc_id);
+            console.log(`[MESSAGE] PLC ${plc_id} current status: ${targetPlc?.status}`);
+
+            return prev.map((p) =>
               p.id === plc_id
                 ? { ...p, lastReceived: timestamp, data:message }
                 : p
-            )
-          );
+            );
+          });
         });
 
         const unlistenDisconnect = await listen('plc-disconnected', (event) => {
           const { plc_id, reason } = event.payload;
-          console.log(`PLC ${plc_id} disconnected: ${reason}`);
 
-          // 対象のPLCの接続状態を切断に更新(最終受信データと時刻は保持)
-          setPlcList((prev) =>
-            prev.map((p) =>
+          console.log('========== PLC DISCONNECT EVENT ==========');
+          console.log(`[DISCONNECT] Timestamp: ${new Date().toISOString()}`);
+          console.log(`[DISCONNECT] PLC ID: ${plc_id}`);
+          console.log(`[DISCONNECT] Reason: ${reason}`);
+
+          // イベント受信時の現在の状態をログ出力
+          setPlcList((prev) => {
+            const targetPlc = prev.find(p => p.id === plc_id);
+            console.log(`[DISCONNECT] Current state BEFORE update:`, {
+              id: targetPlc?.id,
+              name: targetPlc?.name,
+              status: targetPlc?.status,
+              lastReceived: targetPlc?.lastReceived,
+              hasData: !!targetPlc?.data
+            });
+
+            const updated = prev.map((p) =>
               p.id === plc_id
                 ? { ...p, status: "disconnected" }
                 : p
-            )
-          );
+            );
+
+            const updatedPlc = updated.find(p => p.id === plc_id);
+            console.log(`[DISCONNECT] New state AFTER update:`, {
+              id: updatedPlc?.id,
+              name: updatedPlc?.name,
+              status: updatedPlc?.status,
+              lastReceived: updatedPlc?.lastReceived,
+              hasData: !!updatedPlc?.data
+            });
+            console.log('==========================================');
+
+            return updated;
+          });
         });
 
         return () => {
@@ -104,6 +134,12 @@ export default function StackCard() {
 
   const handleConnect = async (plc) => {
     try {
+      console.log('========== PLC CONNECT REQUEST ==========');
+      console.log(`[CONNECT] Timestamp: ${new Date().toISOString()}`);
+      console.log(`[CONNECT] PLC ID: ${plc.id}`);
+      console.log(`[CONNECT] PLC Name: ${plc.name}`);
+      console.log(`[CONNECT] Current status: ${plc.status}`);
+
       // 元の設定データから該当のPLC設定を取得
       const config = plcConfigs.find((c) => c.id === plc.id);
       if (!config) {
@@ -119,16 +155,22 @@ export default function StackCard() {
         pcIp: config.pc_ip,
       });
 
+      console.log(`[CONNECT] Backend connection successful for PLC ${plc.id}`);
+
       // 接続成功したらステータスを更新
-      setPlcList((prev) =>
-        prev.map((p) =>
+      setPlcList((prev) => {
+        const updated = prev.map((p) =>
           p.id === plc.id
             ? { ...p, status: "connected", lastReceived: new Date().toLocaleString("ja-JP") }
             : p
-        )
-      );
+        );
+        console.log(`[CONNECT] Frontend status updated to 'connected' for PLC ${plc.id}`);
+        console.log('==========================================');
+        return updated;
+      });
     } catch (err) {
-      console.error("Failed to connect to PLC:", err);
+      console.error(`[CONNECT ERROR] Failed to connect to PLC ${plc.id}:`, err);
+      console.log('==========================================');
       alert(`接続に失敗しました: ${err}`);
       throw err;
     }
@@ -137,17 +179,29 @@ export default function StackCard() {
   // PLC切断処理
   const handleDisconnect = async (plc) => {
     try {
+      console.log('========== PLC MANUAL DISCONNECT REQUEST ==========');
+      console.log(`[MANUAL DISCONNECT] Timestamp: ${new Date().toISOString()}`);
+      console.log(`[MANUAL DISCONNECT] PLC ID: ${plc.id}`);
+      console.log(`[MANUAL DISCONNECT] PLC Name: ${plc.name}`);
+      console.log(`[MANUAL DISCONNECT] Current status: ${plc.status}`);
+
       // Rust側の切断コマンドを呼び出す
       await invoke("disconnect_plc", { plcId: plc.id });
 
+      console.log(`[MANUAL DISCONNECT] Backend disconnection successful for PLC ${plc.id}`);
+
       // 切断成功したらステータスを更新(最終受信データと時刻は保持)
-      setPlcList((prev) =>
-        prev.map((p) =>
+      setPlcList((prev) => {
+        const updated = prev.map((p) =>
           p.id === plc.id ? { ...p, status: "disconnected" } : p
-        )
-      );
+        );
+        console.log(`[MANUAL DISCONNECT] Frontend status updated to 'disconnected' for PLC ${plc.id}`);
+        console.log('===================================================');
+        return updated;
+      });
     } catch (err) {
-      console.error("Failed to disconnect from PLC:", err);
+      console.error(`[MANUAL DISCONNECT ERROR] Failed to disconnect from PLC ${plc.id}:`, err);
+      console.log('===================================================');
       alert(`切断に失敗しました: ${err}`);
       throw err;
     }

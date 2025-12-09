@@ -91,7 +91,7 @@ export default function PLCCard({ plc, config,onConnect, onDisconnect, onDelete,
             ) : (
               <>
                 <XCircle size={16} />
-                切断
+                切断中
               </>
             )}
           </span>
@@ -110,7 +110,7 @@ export default function PLCCard({ plc, config,onConnect, onDisconnect, onDelete,
             className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
           >
             <Square size={16} />
-            切断
+            切断実施
           </button>
         ) : (
           <button
@@ -121,7 +121,7 @@ export default function PLCCard({ plc, config,onConnect, onDisconnect, onDelete,
             }`}
           >
             <Play size={16} />
-            {isConnecting ? "接続中..." : "接続"}
+            {isConnecting ? "接続中..." : "接続実施"}
           </button>
         )}
       </div>

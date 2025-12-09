@@ -1,7 +1,6 @@
 -- PostgreSQL パーティションテーブル定義
 -- CHIPDATA: 親テーブル（パーティション化）
 -- パーティションキー: LD_PICKUP_DATE (RANGE) + MACHINE_ID (LIST)
-
 CREATE TABLE IF NOT EXISTS CHIPDATA (
 	id					SERIAL,
 	machine_id			INTEGER NOT NULL,
@@ -111,19 +110,25 @@ CREATE TABLE IF NOT EXISTS CHIPDATA (
 	uld_chip_align_y	INTEGER,
 	uld_chip_align_num	INTEGER,
 	uld_alarm			INTEGER,
-	PRIMARY KEY (id, ld_pickup_date, machine_id),
-	CONSTRAINT uix_lot_serial UNIQUE (lot_name, serial, ld_pickup_date, machine_id)
-) PARTITION BY RANGE (DATE(ld_pickup_date));
+	PRIMARY KEY (lot_name, serial, ld_pickup_date, machine_id)
+) PARTITION BY RANGE (ld_pickup_date);
 
 -- インデックス作成
 CREATE INDEX IF NOT EXISTS idx_chipdata_machine_id ON CHIPDATA (machine_id);
 CREATE INDEX IF NOT EXISTS idx_chipdata_lot_name ON CHIPDATA (lot_name);
 CREATE INDEX IF NOT EXISTS idx_chipdata_pickup_date ON CHIPDATA (ld_pickup_date);
 
--- パーティション作成例（初期セットアップ用）
--- 注意: 実際の運用では、日付範囲に応じて動的に作成する必要があります
--- CREATE TABLE IF NOT EXISTS chipdata_2025_01 PARTITION OF CHIPDATA
---     FOR VALUES FROM ('2025-01-01') TO ('2025-02-01');
---
--- CREATE TABLE IF NOT EXISTS chipdata_2025_02 PARTITION OF CHIPDATA
---     FOR VALUES FROM ('2025-02-01') TO ('2025-03-01');
+-- 複合インデックス（lot_name + serial）でWHERE lot_name + ORDER BY serialを高速化
+CREATE INDEX IF NOT EXISTS idx_chipdata_lot_serial ON CHIPDATA (lot_name, serial);
+
+-- LOT管理テーブル（メタデータ）
+CREATE TABLE IF NOT EXISTS LOTDATE (
+	lot_name	VARCHAR PRIMARY KEY,
+	start_date	TIMESTAMP NOT NULL,
+	end_date	TIMESTAMP NOT NULL,
+	machine_id	INTEGER
+);
+
+-- インデックス作成
+CREATE INDEX IF NOT EXISTS idx_lotdate_dates ON LOTDATE (start_date, end_date);
+

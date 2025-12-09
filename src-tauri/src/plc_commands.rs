@@ -108,7 +108,7 @@ async fn receive_data_from_plc(
     db_tx: DbChannelState,
     app: AppHandle,
 ) {
-    println!("Starting receive loop for PLC ID: {}", plc_id);
+    log::info!("Starting receive loop for PLC ID: {}", plc_id);
     let mut buffer = vec![0u8; 4096];
 
     loop {
@@ -117,11 +117,11 @@ async fn receive_data_from_plc(
             let connections = state.lock();
             if let Some(conn) = connections.get(&plc_id) {
                 if !conn.is_connected {
-                    println!("PLC ID {} is disconnected, stopping receive loop", plc_id);
+                    log::warn!("PLC ID {} is disconnected, stopping receive loop", plc_id);
                     break;
                 }
             } else {
-                println!("PLC ID {} not found in state, stopping receive loop", plc_id);
+                log::error!("PLC ID {} not found in state, stopping receive loop", plc_id);
                 break;
             }
         }
@@ -129,7 +129,7 @@ async fn receive_data_from_plc(
         // データを受信
         match stream.read(&mut buffer).await {
             Ok(0) => {
-                println!("PLC ID {} connection closed by remote", plc_id);
+                log::info!("PLC ID {} connection closed by remote", plc_id);
                 // 接続が閉じられた場合
                 {
                     let mut connections = state.lock();
@@ -145,19 +145,19 @@ async fn receive_data_from_plc(
                 });
 
                 if let Err(e) = app.emit("plc-disconnected", payload) {
-                    eprintln!("Failed to emit disconnection event: {}", e);
+                    log::error!("Failed to emit disconnection event: {}", e);
                 }
 
                 break;
             }
             Ok(n) => {
-                println!("Received {} bytes from PLC ID {}", n, plc_id);
+                log::info!("Received {} bytes from PLC ID {}", n, plc_id);
                 // 受信したデータを処理
                 let received_data = &buffer[..n];
                 process_received_data(plc_id, table_name,received_data, &db_tx, &app);
             }
             Err(e) => {
-                eprintln!("Error reading from PLC ID {}: {}", plc_id, e);
+                log::error!("Error reading from PLC ID {}: {}", plc_id, e);
                 // エラーが発生した場合
                 {
                     let mut connections = state.lock();
@@ -172,7 +172,7 @@ async fn receive_data_from_plc(
                     "reason": format!("Error: {}", e),
                 });
                 if let Err(e) = app.emit("plc-disconnected", payload) {
-                    eprintln!("Failed to emit disconnection event: {}", e);
+                    log::error!("Failed to emit disconnection event: {}", e);
                 }
 
                 break;
@@ -185,7 +185,6 @@ async fn receive_data_from_plc(
 
 /// 受信したデータを処理する
 fn process_received_data(plc_id: u32, table_name:&str,data: &[u8], db_tx: &DbChannelState, app: &AppHandle) {
-    println!("Processing data for PLC ID {}: {:?}", plc_id, data);
 
     // UTF-8としてデコード
     match std::str::from_utf8(data) {
@@ -210,7 +209,7 @@ fn process_received_data(plc_id: u32, table_name:&str,data: &[u8], db_tx: &DbCha
             /*----受信データをデータベースに保存（チャネル経由で送信）---- */
             // 各タスクが独自のクローンを持っているので、ロック不要で高速
             if let Err(e) = save_plc_data(db_tx, plc_id, table_name,&formatted_date, text) {
-                eprintln!("Failed to send data to DB writer for PLC {}: {}", plc_id, e);
+                log::error!("Failed to send data to DB writer for PLC {}: {}", plc_id, e);
             }
 
         }
@@ -227,7 +226,7 @@ pub async fn disconnect_plc(
     state: tauri::State<'_, ConnectionState>,
     app: AppHandle,
 ) -> Result<String, String> {
-    println!("Disconnecting from PLC ID: {}", plc_id);
+    log::info!("Disconnecting from PLC ID: {}", plc_id);
 
     let mut connections = state.lock();
 
@@ -240,7 +239,7 @@ pub async fn disconnect_plc(
 
         // TODO: ソケットを閉じる処理
 
-        println!("Disconnected from PLC ID: {}", plc_id);
+        log::info!("Disconnected from PLC ID: {}", plc_id);
 
         // フロントエンドに切断イベントを送信
         let payload = serde_json::json!({
@@ -249,7 +248,7 @@ pub async fn disconnect_plc(
         });
 
         if let Err(e) = app.emit("plc-disconnected", payload) {
-            eprintln!("Failed to emit disconnection event: {}", e);
+            log::error!("Failed to emit disconnection event: {}", e);
         }
 
         Ok(format!("Disconnected from PLC {}", plc_id))

@@ -1,14 +1,5 @@
 import { listen } from '@tauri-apps/api/event';
 
-// PLCメッセージを受信
-export const unlisten = await listen('plc-message', (event) => {
-  const { plc_id, message, timestamp } = event.payload;
-  console.log(`PLC ${plc_id} at ${timestamp}: ${message}`);
-  
-  // UIに表示する処理
-  //displayMessage(plc_id, message, timestamp);
-});
-
 // PLCエラーを受信
 const unlistenError = await listen('plc-error', (event) => {
   const { plc_id, error, hex_data, timestamp } = event.payload;

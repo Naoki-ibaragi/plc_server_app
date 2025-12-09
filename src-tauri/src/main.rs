@@ -55,7 +55,7 @@ fn main() {
                 ])
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
                 .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
-                .level(log::LevelFilter::Debug)
+                .level(log::LevelFilter::Info)
                 .build(),
         )
         .plugin(single_instance(|app, _args, _cwd| {
