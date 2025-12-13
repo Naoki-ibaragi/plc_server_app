@@ -106,7 +106,54 @@ pub async fn regist_u1_tr_info(
     Ok(())
 }
 
-/// 上流アームコレット使用回数情報をDBに挿入
+/// LDのみ対象:上流アームコレット使用回数情報をDBに挿入
+pub async fn regist_ld_arm1_info(
+    tx: &mut Transaction<'_, Postgres>,
+    machine_id: i32,
+    lot_name: &str,
+    type_name: &str,
+    value: &Value,
+    manage_ld_pickup_date_map:&HashMap<i32,HashMap<String,HashMap<i32,NaiveDateTime>>>
+) -> Result<(), sqlx::Error> {
+    let hash_map = value.as_object().unwrap();
+    let serial = hash_map.get("serial").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let wano = hash_map.get("wano").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let wax = hash_map.get("wax").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let way = hash_map.get("way").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let count = hash_map.get("count").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+
+    let column_name = format!("{}_arm1_collet", convert_unit_name(unit_name).to_lowercase());
+
+    //ld_pickup_date取得
+    let ld_pickup_date = manage_ld_pickup_date_map
+        .get(&machine_id)
+        .and_then(|lot_map| lot_map.get(lot_name))
+        .and_then(|serial_map| serial_map.get(&serial))
+        .copied();
+
+    // ld_pickup_dateが取得できない場合はスキップ（U1_TRがまだ来ていない）
+    let ld_pickup_date = match ld_pickup_date {
+        Some(date) => date,
+        None => {
+            log::warn!("ld_pickup_date not found for machine_id:{}, lot:{}, serial:{}", machine_id, lot_name, serial);
+            return Ok(());
+        }
+    };
+
+    sqlx::query(&format!(
+        "INSERT INTO chipdata (machine_id, type_name, lot_name, serial, ld_pickup_date, wano, wax, way,ld_arm1_collet)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT(lot_name, serial, ld_pickup_date, machine_id)
+         DO UPDATE SET 
+         wano = EXCLUDED.wano,wax = EXCLUDED.wax,way = EXCLUDED.way,ld_arm1_collet = EXCLUDED.ld_arm1_collet",
+    ))
+    .bind(machine_id).bind(type_name).bind(lot_name).bind(serial).bind(ld_pickup_date).bind(wano).bind(wax).bind(way).bind(count)
+    .execute(&mut **tx).await?;
+
+    Ok(())
+}
+
+/// LD以外のユニット：上流アームコレット使用回数情報をDBに挿入
 pub async fn regist_arm1_info(
     tx: &mut Transaction<'_, Postgres>,
     machine_id: i32,
