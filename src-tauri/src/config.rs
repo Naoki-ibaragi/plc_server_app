@@ -67,7 +67,6 @@ pub fn get_config_path() -> Result<PathBuf, String> {
 #[command]
 pub fn add_plc(
     name:String,
-    table_name:String,
     plc_ip: String,
     plc_port: u16,
     pc_ip: String,
@@ -91,7 +90,6 @@ pub fn add_plc(
     config.plcs.push(
         PlcConfig{
             id:id as u32,
-            table_name:table_name,
             name:name,
             plc_ip:plc_ip,
             plc_port:plc_port,
@@ -117,7 +115,6 @@ pub fn add_plc(
 pub fn edit_plc(
     id:u32,
     name:String,
-    table_name:String,
     plc_ip: String,
     plc_port: u16,
     pc_ip: String,
@@ -144,7 +141,6 @@ pub fn edit_plc(
         if id==plc_info.id{
             println!("Found matching PLC, updating...");
             plc_info.name=name.clone();
-            plc_info.table_name=table_name.clone();
             plc_info.plc_ip=plc_ip.clone();
             plc_info.plc_port=plc_port;
             plc_info.pc_ip=pc_ip.clone();

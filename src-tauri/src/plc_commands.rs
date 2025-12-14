@@ -11,7 +11,6 @@ use crate::data_handler::{create_chipdata_table, ensure_current_partitions, save
 #[command]
 pub async fn connect_plc(
     plc_id: u32,
-    table_name: String,
     plc_ip: String,
     plc_port: u16,
     pc_ip: String,
@@ -69,7 +68,6 @@ pub async fn connect_plc(
             plc_id,
             PlcConnection {
                 plc_id,
-                table_name:table_name.clone(),
                 plc_ip: plc_ip.clone(),
                 plc_port,
                 pc_ip: pc_ip.clone(),
@@ -93,7 +91,7 @@ pub async fn connect_plc(
     let state_clone = Arc::clone(&state.inner());
     let db_tx = db_channel.inner().clone();
     tokio::spawn(async move {
-        receive_data_from_plc(plc_id, &table_name,stream, state_clone, db_tx, app).await;
+        receive_data_from_plc(plc_id, stream, state_clone, db_tx, app).await;
     });
 
     Ok(format!("Connected to PLC {}:{}", plc_ip, plc_port))
@@ -102,7 +100,6 @@ pub async fn connect_plc(
 /// PLCからデータを受信する
 async fn receive_data_from_plc(
     plc_id: u32,
-    table_name:&str,
     mut stream: TcpStream,
     state: ConnectionState,
     db_tx: DbChannelState,
@@ -154,7 +151,7 @@ async fn receive_data_from_plc(
                 log::info!("Received {} bytes from PLC ID {}", n, plc_id);
                 // 受信したデータを処理
                 let received_data = &buffer[..n];
-                process_received_data(plc_id, table_name,received_data, &db_tx, &app);
+                process_received_data(plc_id, received_data, &db_tx, &app);
             }
             Err(e) => {
                 log::error!("Error reading from PLC ID {}: {}", plc_id, e);
@@ -184,7 +181,7 @@ async fn receive_data_from_plc(
 }
 
 /// 受信したデータを処理する
-fn process_received_data(plc_id: u32, table_name:&str,data: &[u8], db_tx: &DbChannelState, app: &AppHandle) {
+fn process_received_data(plc_id: u32, data: &[u8], db_tx: &DbChannelState, app: &AppHandle) {
 
     // UTF-8としてデコード
     match std::str::from_utf8(data) {
@@ -208,7 +205,7 @@ fn process_received_data(plc_id: u32, table_name:&str,data: &[u8], db_tx: &DbCha
 
             /*----受信データをデータベースに保存（チャネル経由で送信）---- */
             // 各タスクが独自のクローンを持っているので、ロック不要で高速
-            if let Err(e) = save_plc_data(db_tx, plc_id, table_name,&formatted_date, text) {
+            if let Err(e) = save_plc_data(db_tx, plc_id, &formatted_date, text) {
                 log::error!("Failed to send data to DB writer for PLC {}: {}", plc_id, e);
             }
 

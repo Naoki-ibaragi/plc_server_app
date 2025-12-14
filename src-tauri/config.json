@@ -3,7 +3,6 @@
     {
       "id": 1,
       "name": "CLT 1号機",
-      "table_name": "clt_data_1",
       "plc_ip": "127.0.0.1",
       "plc_port": 20000,
       "pc_ip": "127.0.0.1"
@@ -11,7 +10,6 @@
     {
       "id": 2,
       "name": "CLT 2号機",
-      "table_name": "clt_data_2",
       "plc_ip": "127.0.0.1",
       "plc_port": 20001,
       "pc_ip": "127.0.0.1"
@@ -19,7 +17,6 @@
     {
       "id": 3,
       "name": "CLT 3号機",
-      "table_name": "clt_data_3",
       "plc_ip": "127.0.0.1",
       "plc_port": 20002,
       "pc_ip": "127.0.0.1"
@@ -27,9 +24,15 @@
     {
       "id": 4,
       "name": "CLT 4号機",
-      "table_name": "clt_data_4",
       "plc_ip": "127.0.0.1",
       "plc_port": 20003,
+      "pc_ip": "127.0.0.1"
+    },
+    {
+      "id": 5,
+      "name": "CLT 5号機",
+      "plc_ip": "127.0.0.1",
+      "plc_port": 20004,
       "pc_ip": "127.0.0.1"
     }
   ]

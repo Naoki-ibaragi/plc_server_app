@@ -21,7 +21,6 @@ export default function StackCard() {
         setPlcConfigs(configs);
         const formattedData = configs.map((config) => ({
           id: config.id,
-          table_name: config.table_name,
           name: config.name,
           status: "disconnected",
           ip: config.plc_ip,
@@ -149,7 +148,6 @@ export default function StackCard() {
       // Rust側の接続コマンドを呼び出す
       await invoke("connect_plc", {
         plcId: plc.id,
-        tableName: plc.table_name,
         plcIp: config.plc_ip,
         plcPort: config.plc_port,
         pcIp: config.pc_ip,
@@ -213,7 +211,6 @@ export default function StackCard() {
       // Rust側のPLC追加コマンドを呼び出す
       const newConfig = await invoke("add_plc", {
         name: formData.name,
-        tableName: formData.table_name,
         plcIp: formData.plc_ip,
         plcPort: parseInt(formData.plc_port),
         pcIp: formData.pc_ip,
@@ -232,7 +229,6 @@ export default function StackCard() {
         {
           id: last_item.id,
           name: last_item.name,
-          table_name: last_item.table_name,
           status: "disconnected",
           ip: last_item.plc_ip,
           port: last_item.plc_port,
@@ -255,7 +251,6 @@ export default function StackCard() {
       const newConfig = await invoke("edit_plc", {
         id: formData.id,
         name: formData.name,
-        tableName: formData.table_name,
         plcIp: formData.plc_ip,
         plcPort: parseInt(formData.plc_port),
         pcIp: formData.pc_ip,
@@ -273,7 +268,6 @@ export default function StackCard() {
             ? {
                 ...p,
                 name: formData.name,
-                table_name: formData.table_name,
                 ip: formData.plc_ip,
                 port: parseInt(formData.plc_port),
               }

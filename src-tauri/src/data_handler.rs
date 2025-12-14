@@ -21,7 +21,6 @@ static CREATE_TABLE_SQL:&str = include_str!("sql/create_table.sql");
 #[derive(Debug, Clone)]
 pub struct DbWriteRequest {
     pub plc_id: u32,
-    pub table_name: String,
     pub timestamp: String,
     pub message: String,
 }
@@ -98,7 +97,7 @@ fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
                 }
             };
                 
-                // ロット番号の取り出し
+            // ロット番号の取り出し
             let lot_name = recv_data
                 .get("LOT")
                 .and_then(|v| v.as_str())
@@ -306,17 +305,14 @@ pub async fn ensure_current_partitions() -> Result<(), sqlx::Error> {
 }
 
 /// PLCから受信したデータをDB書き込みスレッドに送信する
-/// 各受信タスクは独自の tx クローンを持っているので、ロック不要
 pub fn save_plc_data(
     tx: &mpsc::UnboundedSender<DbWriteRequest>,
     plc_id: u32,
-    table_name:&str,
     timestamp: &str,
     message: &str,
 ) -> Result<(), String> {
     let request = DbWriteRequest {
         plc_id:plc_id,
-        table_name:table_name.to_string(),
         timestamp: timestamp.to_string(),
         message: message.to_string(),
     };

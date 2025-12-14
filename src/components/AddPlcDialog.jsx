@@ -63,18 +63,6 @@ export default function AddPlcDialog({ isOpen, onClose, onAdd }) {
           </div>
 
           <div>
-            <label className="block text-sm text-gray-400 mb-1">DBテーブル名</label>
-            <input
-              type="text"
-              value={formData.table_name}
-              onChange={(e) => setFormData({ ...formData, table_name: e.target.value })}
-              className="w-full px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
-              placeholder="例: clt_table_1 (DBで使用)"
-              required
-            />
-          </div>
-
-          <div>
             <label className="block text-sm text-gray-400 mb-1">PLC IPアドレス</label>
             <input
               type="text"

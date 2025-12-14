@@ -2,7 +2,6 @@ use serde_json::Value;
 use sqlx::{Postgres, Transaction};
 use chrono::NaiveDateTime;
 use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 
 ///ユニット名変換実施
 fn convert_unit_name(unit_name:&str)->&str{
@@ -121,8 +120,6 @@ pub async fn regist_ld_arm1_info(
     let wax = hash_map.get("wax").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
     let way = hash_map.get("way").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
     let count = hash_map.get("count").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-
-    let column_name = format!("{}_arm1_collet", convert_unit_name(unit_name).to_lowercase());
 
     //ld_pickup_date取得
     let ld_pickup_date = manage_ld_pickup_date_map

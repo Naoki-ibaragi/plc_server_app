@@ -141,11 +141,6 @@ export default function PLCCard({ plc, config,onConnect, onDisconnect, onDelete,
             </div>
 
             <div>
-              <p className="text-sm text-gray-400 mb-1">テーブル名</p>
-              <p className="text-white font-mono">{plc.table_name}</p>
-            </div>
-
-            <div>
               <p className="text-sm text-gray-400 mb-1">最終受信時刻</p>
               <p className="text-white">{plc.lastReceived}</p>
             </div>
