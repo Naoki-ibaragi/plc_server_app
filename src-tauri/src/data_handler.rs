@@ -74,7 +74,7 @@ fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
                 request.plc_id,
                 request.message.len()
             );
-            log::debug!("PLC data content: {}", request.message);
+            log::info!("PLC data content: {}", request.message);
 
             // 接続プールから接続を取得
             let pool = {

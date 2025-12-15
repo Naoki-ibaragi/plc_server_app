@@ -25,6 +25,29 @@ use state::init_connection_state;
 use data_handler::init_database;
 
 fn main() {
+    // 早期にログディレクトリを作成
+    if let Err(e) = std::fs::create_dir_all("logs") {
+        eprintln!("Failed to create logs directory: {}", e);
+    }
+
+    // 早期ログ初期化用のシンプルなロガーを設定
+    let early_logger = fern::Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "[{}][{}] {}",
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                record.level(),
+                message
+            ))
+        })
+        .level(log::LevelFilter::Info)
+        .chain(fern::DateBased::new("logs/", "%Y-%m-%d.log"))
+        .apply();
+
+    if let Err(e) = early_logger {
+        eprintln!("Failed to initialize early logger: {}", e);
+    }
+
     let connection_state = init_connection_state();
 
     // データベースを初期化し、チャネルの送信側を取得（非同期）
@@ -32,6 +55,7 @@ fn main() {
         match init_database().await {
             Ok(tx) => tx,
             Err(e) => {
+                log::error!("Failed to initialize database: {}", e);
                 eprintln!("Failed to initialize database: {}", e);
                 std::process::exit(1);
             }
@@ -66,11 +90,6 @@ fn main() {
             }
         }))
         .setup(|app| {
-            // ログディレクトリを作成
-            if let Err(e) = std::fs::create_dir_all("logs") {
-                eprintln!("Failed to create logs directory: {}", e);
-            }
-
             // トレイアイコンをセットアップ
             tray::setup_tray_icon(app)?;
             log::info!("アプリを起動しました");
