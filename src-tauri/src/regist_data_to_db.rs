@@ -533,6 +533,61 @@ pub async fn regist_uld_pocket_info(
     Ok(())
 }
 
+/// ULDのみ対象:コレット使用回数情報,予熱部補正,トレイポケット補正情報をDBに挿入
+pub async fn regist_uld_arm1_info(
+    tx: &mut Transaction<'_, Postgres>,
+    machine_id: i32,
+    lot_name: &str,
+    type_name: &str,
+    value: &Value,
+    manage_ld_pickup_date_map:&HashMap<i32,HashMap<String,HashMap<i32,NaiveDateTime>>>
+) -> Result<(), sqlx::Error> {
+    let hash_map = value.as_object().unwrap();
+    let serial = hash_map.get("serial").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let count = hash_map.get("count").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let trayid = hash_map.get("trayid").and_then(|v| v.as_str()).unwrap_or("unknown");
+    let px = hash_map.get("px").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let py = hash_map.get("py").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let ax = hash_map.get("ax").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let ay = hash_map.get("ay").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let at = hash_map.get("at").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let pax = hash_map.get("pax").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let pay = hash_map.get("pay").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+
+    //ld_pickup_date取得
+    let ld_pickup_date = manage_ld_pickup_date_map
+        .get(&machine_id)
+        .and_then(|lot_map| lot_map.get(lot_name))
+        .and_then(|serial_map| serial_map.get(&serial))
+        .copied();
+
+    // ld_pickup_dateが取得できない場合はスキップ（U1_TRがまだ来ていない）
+    let ld_pickup_date = match ld_pickup_date {
+        Some(date) => date,
+        None => {
+            log::warn!("ld_pickup_date not found for machine_id:{}, lot:{}, serial:{}", machine_id, lot_name, serial);
+            return Ok(());
+        }
+    };
+
+    sqlx::query(&format!(
+        "INSERT INTO chipdata (machine_id, type_name, lot_name, serial, ld_pickup_date, uld_arm1_collet, uld_trayid, uld_pocket_x, uld_pocket_y,
+        uld_pre_align_x, uld_pre_align_y, uld_pre_align_t, uld_pocket_align_x, uld_pocket_align_y)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         ON CONFLICT(lot_name, serial, ld_pickup_date, machine_id)
+         DO UPDATE SET 
+         uld_arm1_collet = EXCLUDED.uld_arm1_collet, uld_trayid=EXCLUDED.uld_trayid,uld_pocket_x=EXCLUDED.uld_pocket_x,uld_pocket_y=EXCLUDED.uld_pocket_y,
+         uld_pre_align_x=EXCLUDED.uld_pre_align_x, uld_pre_align_y=EXCLUDED.uld_pre_align_y, uld_pre_align_t=EXCLUDED.uld_pre_align_t, uld_pocket_align_x=EXCLUDED.uld_pocket_align_x, uld_pocket_align_y=EXCLUDED.uld_pocket_align_y"
+    ))
+    .bind(machine_id).bind(type_name).bind(lot_name).bind(serial).bind(ld_pickup_date).bind(count).bind(trayid).bind(px).bind(py)
+    .bind(ax).bind(ay).bind(at).bind(pax).bind(pay)
+    .execute(&mut **tx).await?;
+
+    Ok(())
+}
+
+
+
 /// ULDチップアライメントデータをDBに挿入
 pub async fn regist_uld_chip_info(
     tx: &mut Transaction<'_, Postgres>,

@@ -129,7 +129,7 @@ fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
                 let result = if key.contains("U1_TR") {
                     // LD TRAYデータを登録
                     regist_u1_tr_info(&mut tx, machine_id, lot_name, type_name, value,&mut manage_ld_pickup_date).await
-                } else if key.contains("_A1_") && !key.contains("U1"){
+                } else if key.contains("_A1_") && !key.contains("U1") && !key.contains("U7"){
                     // 上流アームコレットの使用回数データを登録
                     let unit_name = match key.split('_').next() {
                         Some(v) => v,
@@ -139,6 +139,9 @@ fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
                 } else if key.contains("_A1_") && key.contains("U1"){
                     //LDのアーム1にはwano,wax,way情報が入っているので分ける
                     regist_ld_arm1_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
+                }else if key.contains("_A1_") && key.contains("U7"){
+                    //ULDのアーム1でpx,py,ax,ay,at,pax,pay全て一気に登録する
+                    regist_uld_arm1_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
                 }else if key.contains("_A2_") {
                     // 下流アームコレットの使用回数データを登録
                     let unit_name = match key.split('_').next() {
