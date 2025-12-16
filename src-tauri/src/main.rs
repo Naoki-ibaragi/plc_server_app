@@ -30,42 +30,10 @@ fn main() {
         eprintln!("Failed to create logs directory: {}", e);
     }
 
-    // 早期ログ初期化用のシンプルなロガーを設定
-    let early_logger = fern::Dispatch::new()
-        .format(|out, message, record| {
-            out.finish(format_args!(
-                "[{}][{}] {}",
-                chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
-                record.level(),
-                message
-            ))
-        })
-        .level(log::LevelFilter::Info)
-        .chain(fern::DateBased::new("logs/", "%Y-%m-%d.log"))
-        .apply();
-
-    if let Err(e) = early_logger {
-        eprintln!("Failed to initialize early logger: {}", e);
-    }
-
     let connection_state = init_connection_state();
-
-    // データベースを初期化し、チャネルの送信側を取得（非同期）
-    let db_channel = tauri::async_runtime::block_on(async {
-        match init_database().await {
-            Ok(tx) => tx,
-            Err(e) => {
-                log::error!("Failed to initialize database: {}", e);
-                eprintln!("Failed to initialize database: {}", e);
-                std::process::exit(1);
-            }
-        }
-    });
 
     tauri::Builder::default()
         .manage(connection_state)
-        .manage(db_channel) // DB チャネルを状態として管理
-        .invoke_handler(tauri::generate_handler![init_socket, connect_plc, disconnect_plc, add_plc, edit_plc, delete_plc])
         .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -82,6 +50,7 @@ fn main() {
                 .level(log::LevelFilter::Info)
                 .build(),
         )
+        .invoke_handler(tauri::generate_handler![init_socket, connect_plc, disconnect_plc, add_plc, edit_plc, delete_plc])
         .plugin(single_instance(|app, _args, _cwd| {
             // 既にインスタンスが起動している場合、ウィンドウを表示
             if let Some(window) = app.get_webview_window("main") {
@@ -90,6 +59,21 @@ fn main() {
             }
         }))
         .setup(|app| {
+            // データベースを初期化し、チャネルの送信側を取得（非同期）
+            let db_channel = tauri::async_runtime::block_on(async {
+                match init_database().await {
+                    Ok(tx) => tx,
+                    Err(e) => {
+                        log::error!("Failed to initialize database: {}", e);
+                        eprintln!("Failed to initialize database: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            });
+
+            // DB チャネルを状態として管理
+            app.manage(db_channel);
+
             // トレイアイコンをセットアップ
             tray::setup_tray_icon(app)?;
             log::info!("アプリを起動しました");

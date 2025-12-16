@@ -314,7 +314,7 @@ pub async fn regist_ts_info(
     let px2 = hash_map.get("probe_x2").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
     let py2 = hash_map.get("probe_y2").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
     let sz = hash_map.get("stage_z").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-    let pz = hash_map.get("probe_z").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let pz = hash_map.get("pin_z").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
     let cax = hash_map.get("ax").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
     let cay = hash_map.get("ay").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
     let cat = hash_map.get("at").and_then(|v| v.as_i64()).unwrap_or(0) as i32;

@@ -124,11 +124,21 @@ fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
                 }
             };
 
+            // U1_TRを含むキーを優先的に処理（ld_pickup_dateの登録のため）
+            for (key, value) in &recv_data {
+                if key.contains("U1_TR") {
+                    let result = regist_u1_tr_info(&mut tx, machine_id, lot_name, type_name, value,&mut manage_ld_pickup_date).await;
+                    if let Err(e) = result {
+                        log::error!("Failed to register data for key '{}': {}", key, e);
+                    }
+                }
+            }
+
             // 各ユニット情報の取り出しと登録
             for (key, value) in &recv_data {
                 let result = if key.contains("U1_TR") {
-                    // LD TRAYデータを登録
-                    regist_u1_tr_info(&mut tx, machine_id, lot_name, type_name, value,&mut manage_ld_pickup_date).await
+                    // すでに処理済みなのでスキップ
+                    continue;
                 } else if key.contains("_A1_") && !key.contains("U1") && !key.contains("U7"){
                     // 上流アームコレットの使用回数データを登録
                     let unit_name = match key.split('_').next() {

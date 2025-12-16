@@ -107,6 +107,7 @@ async fn receive_data_from_plc(
 ) {
     log::info!("Starting receive loop for PLC ID: {}", plc_id);
     let mut buffer = vec![0u8; 4096];
+    let mut incomplete_data = String::new(); // 未完了データを蓄積するバッファ
 
     loop {
         // 接続状態をチェック
@@ -149,9 +150,39 @@ async fn receive_data_from_plc(
             }
             Ok(n) => {
                 log::info!("Received {} bytes from PLC ID {}", n, plc_id);
-                // 受信したデータを処理
-                let received_data = &buffer[..n];
-                process_received_data(plc_id, received_data, &db_tx, &app);
+
+                // 受信したデータをUTF-8としてデコード
+                match std::str::from_utf8(&buffer[..n]) {
+                    Ok(text) => {
+                        // 前回の未完了データと結合
+                        incomplete_data.push_str(text);
+
+                        // 改行で分割してメッセージを処理
+                        // 最後の要素が改行で終わっていない場合は未完了データとして保持
+                        let ends_with_newline = incomplete_data.ends_with('\n');
+                        let mut lines: Vec<&str> = incomplete_data.split('\n').collect();
+
+                        // 最後の要素を取り出して新しい未完了データとして保存
+                        let remaining = if !ends_with_newline {
+                            lines.pop().unwrap_or("").to_string()
+                        } else {
+                            String::new()
+                        };
+
+                        // 完全なメッセージを処理
+                        for line in lines {
+                            if !line.trim().is_empty() {
+                                process_received_data(plc_id, line.as_bytes(), &db_tx, &app);
+                            }
+                        }
+
+                        // 未完了データを更新
+                        incomplete_data = remaining;
+                    }
+                    Err(e) => {
+                        log::error!("Failed to decode UTF-8 from PLC ID {}: {}", plc_id, e);
+                    }
+                }
             }
             Err(e) => {
                 log::error!("Error reading from PLC ID {}: {}", plc_id, e);
