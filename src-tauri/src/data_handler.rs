@@ -139,7 +139,7 @@ fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
                 let result = if key.contains("U1_TR") {
                     // すでに処理済みなのでスキップ
                     continue;
-                } else if key.contains("_A1_") && !key.contains("U1") && !key.contains("U7"){
+                } else if key.contains("_A1_") && !key.contains("U1") && !key.contains("U7") && !key.contains("U2"){
                     // 上流アームコレットの使用回数データを登録
                     let unit_name = match key.split('_').next() {
                         Some(v) => v,
@@ -152,6 +152,9 @@ fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
                 }else if key.contains("_A1_") && key.contains("U7"){
                     //ULDのアーム1でpx,py,ax,ay,at,pax,pay全て一気に登録する
                     regist_uld_arm1_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
+                }else if key.contains("_A1_") && key.contains("U2"){
+                    //DC1のアーム1で予熱テーブルの補正量も登録するように変更
+                    regist_dc1_arm1_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
                 }else if key.contains("_A2_") {
                     // 下流アームコレットの使用回数データを登録
                     let unit_name = match key.split('_').next() {

@@ -84,18 +84,21 @@ pub async fn regist_u1_tr_info(
     .bind(lot_name).bind(ld_pickup_date).bind(machine_id)
     .execute(&mut **tx).await?;
 
+    // 同一のserial, lot_name, machine_idが存在する場合は削除（ld_pickup_dateも含めて上書きするため）
+    sqlx::query(
+        "DELETE FROM chipdata
+         WHERE lot_name = $1 AND serial = $2 AND machine_id = $3"
+    )
+    .bind(lot_name).bind(serial).bind(machine_id)
+    .execute(&mut **tx).await?;
+
+    // 新規レコードとして挿入
     sqlx::query(
         "INSERT INTO chipdata (
             machine_id, type_name, lot_name, serial, wano, wax, way, ld_pickup_date,
             ld_trayid, ld_tray_arm, ld_tray_pocket_x, ld_tray_pocket_y,
             ld_tray_align_x, ld_tray_align_y
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-        ON CONFLICT(lot_name, serial, ld_pickup_date, machine_id)
-        DO UPDATE SET
-            type_name = EXCLUDED.type_name, wano = EXCLUDED.wano, wax = EXCLUDED.wax,
-            way = EXCLUDED.way, ld_trayid = EXCLUDED.ld_trayid, ld_tray_arm = EXCLUDED.ld_tray_arm,
-            ld_tray_pocket_x = EXCLUDED.ld_tray_pocket_x, ld_tray_pocket_y = EXCLUDED.ld_tray_pocket_y,
-            ld_tray_align_x = EXCLUDED.ld_tray_align_x, ld_tray_align_y = EXCLUDED.ld_tray_align_y"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)"
     )
     .bind(machine_id).bind(type_name).bind(lot_name).bind(serial)
     .bind(wano).bind(wax).bind(way).bind(ld_pickup_date)
@@ -533,6 +536,51 @@ pub async fn regist_uld_pocket_info(
     Ok(())
 }
 
+/// DC1のみ対象:コレット使用回数情報,予熱部補正,トレイポケット補正情報をDBに挿入
+pub async fn regist_dc1_arm1_info(
+    tx: &mut Transaction<'_, Postgres>,
+    machine_id: i32,
+    lot_name: &str,
+    type_name: &str,
+    value: &Value,
+    manage_ld_pickup_date_map:&HashMap<i32,HashMap<String,HashMap<i32,NaiveDateTime>>>
+) -> Result<(), sqlx::Error> {
+    let hash_map = value.as_object().unwrap();
+    let serial = hash_map.get("serial").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let count = hash_map.get("count").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let ax = hash_map.get("ax").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let ay = hash_map.get("ay").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let at = hash_map.get("at").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+
+    //ld_pickup_date取得
+    let ld_pickup_date = manage_ld_pickup_date_map
+        .get(&machine_id)
+        .and_then(|lot_map| lot_map.get(lot_name))
+        .and_then(|serial_map| serial_map.get(&serial))
+        .copied();
+
+    // ld_pickup_dateが取得できない場合はスキップ（U1_TRがまだ来ていない）
+    let ld_pickup_date = match ld_pickup_date {
+        Some(date) => date,
+        None => {
+            log::warn!("ld_pickup_date not found for machine_id:{}, lot:{}, serial:{}", machine_id, lot_name, serial);
+            return Ok(());
+        }
+    };
+
+    sqlx::query(&format!(
+        "INSERT INTO chipdata (machine_id, type_name, lot_name, ld_pickup_date, serial, dc1_arm1_collet, dc1_pre_align_x, dc1_pre_align_y, dc1_pre_align_t)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT(lot_name, serial, ld_pickup_date, machine_id)
+         DO UPDATE SET 
+         dc1_arm1_collet = EXCLUDED.dc1_arm1_collet, dc1_pre_align_x=EXCLUDED.dc1_pre_align_x, dc1_pre_align_y=EXCLUDED.dc1_pre_align_y, dc1_pre_align_t=EXCLUDED.dc1_pre_align_t"
+    ))
+    .bind(machine_id).bind(type_name).bind(lot_name).bind(ld_pickup_date).bind(serial).bind(count).bind(ax).bind(ay).bind(at)
+    .execute(&mut **tx).await?;
+
+    Ok(())
+}
+
 /// ULDのみ対象:コレット使用回数情報,予熱部補正,トレイポケット補正情報をDBに挿入
 pub async fn regist_uld_arm1_info(
     tx: &mut Transaction<'_, Postgres>,
@@ -654,7 +702,30 @@ pub async fn regist_alarm_info(
     manage_ld_pickup_date_map:&HashMap<i32,HashMap<String,HashMap<i32,NaiveDateTime>>>
 ) -> Result<(), sqlx::Error> {
     let hash_map = value.as_object().unwrap();
-    let serial = hash_map.get("serial").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+
+    // serialは配列形式で来る（例: [1,2,0,0]）
+    let serial_array = hash_map.get("serial").and_then(|v| v.as_array());
+
+    // 配列から最初の0以外の要素を取得
+    let serial = match serial_array {
+        Some(arr) => {
+            arr.iter()
+                .filter_map(|v| v.as_i64())
+                .map(|v| v as i32)
+                .find(|&v| v != 0)
+        },
+        None => None
+    };
+
+    // serialが見つからない（全て0）場合は処理をスキップ
+    let serial = match serial {
+        Some(s) => s,
+        None => {
+            log::debug!("All serial values are 0, skipping alarm info for machine_id:{}, lot:{}", machine_id, lot_name);
+            return Ok(());
+        }
+    };
+
     let alarm = hash_map.get("alarm_num").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
 
     let column_name = format!("{}_alarm", convert_unit_name(unit_name).to_lowercase());
