@@ -132,3 +132,17 @@ CREATE TABLE IF NOT EXISTS LOTDATE (
 -- インデックス作成
 CREATE INDEX IF NOT EXISTS idx_lotdate_dates ON LOTDATE (start_date, end_date);
 
+-- イベント管理テーブル
+CREATE TABLE IF NOT EXISTS events (
+    id          SERIAL PRIMARY KEY,
+    machine_id  INTEGER,
+    type_name   VARCHAR,
+    lot_name    VARCHAR NOT NULL,
+    date        TIMESTAMP NOT NULL,
+    event_type  VARCHAR NOT NULL,
+    alarm_unit  VARCHAR,
+    alarm_code  INTEGER
+);
+
+CREATE INDEX idx_events_lot_name ON events (lot_name);
+

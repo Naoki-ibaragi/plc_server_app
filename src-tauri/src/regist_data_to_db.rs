@@ -692,6 +692,7 @@ pub async fn regist_uld_chip_info(
 }
 
 /// アラーム情報をDBに挿入
+/// eventsテーブルにも情報を挿入する
 pub async fn regist_alarm_info(
     tx: &mut Transaction<'_, Postgres>,
     machine_id: i32,
@@ -702,6 +703,20 @@ pub async fn regist_alarm_info(
     manage_ld_pickup_date_map:&HashMap<i32,HashMap<String,HashMap<i32,NaiveDateTime>>>
 ) -> Result<(), sqlx::Error> {
     let hash_map = value.as_object().unwrap();
+
+    //まずeventsテーブルに情報を登録する(alarm_numとalarm_dateをhash_mapから取得して登録)
+    let alarm = hash_map.get("alarm_num").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let date_str = hash_map.get("date").and_then(|v| v.as_str()).unwrap_or("1970-01-01 00:00:00");
+    // TIMESTAMP型: YYYY-MM-DD hh:mm:ss形式をそのまま使用
+    let event_date = NaiveDateTime::parse_from_str(date_str, "%Y-%m-%d %H:%M:%S")
+        .unwrap_or_else(|_| NaiveDateTime::default());
+
+    sqlx::query(&format!(
+        "INSERT INTO events (machine_id, type_name, lot_name, date, event_type, alarm_unit, alarm_code)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)")
+    )
+    .bind(machine_id).bind(type_name).bind(lot_name).bind(event_date).bind("ALARM").bind(convert_unit_name(unit_name)).bind(alarm)
+    .execute(&mut **tx).await?;
 
     // serialは配列形式で来る（例: [1,2,0,0]）
     let serial_array = hash_map.get("serial").and_then(|v| v.as_array());
@@ -725,8 +740,6 @@ pub async fn regist_alarm_info(
             return Ok(());
         }
     };
-
-    let alarm = hash_map.get("alarm_num").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
 
     let column_name = format!("{}_alarm", convert_unit_name(unit_name).to_lowercase());
 
@@ -754,6 +767,32 @@ pub async fn regist_alarm_info(
     ))
     .bind(machine_id).bind(type_name).bind(lot_name).bind(serial).bind(ld_pickup_date)
     .bind(alarm)
+    .execute(&mut **tx).await?;
+
+    Ok(())
+}
+
+/// イベント情報をEVENTSテーブルに登録
+pub async fn regist_event_info(
+    tx: &mut Transaction<'_, Postgres>,
+    machine_id: i32,
+    lot_name: &str,
+    type_name: &str,
+    value: &Value,
+    event_type: &str,
+) -> Result<(), sqlx::Error> {
+    let hash_map = value.as_object().unwrap();
+
+    let date_str = hash_map.get("date").and_then(|v| v.as_str()).unwrap_or("1970-01-01 00:00:00");
+    // TIMESTAMP型: YYYY-MM-DD hh:mm:ss形式をそのまま使用
+    let event_date = NaiveDateTime::parse_from_str(date_str, "%Y-%m-%d %H:%M:%S")
+        .unwrap_or_else(|_| NaiveDateTime::default());
+
+    sqlx::query(&format!(
+        "INSERT INTO events (machine_id, type_name, lot_name, date, event_type)
+         VALUES ($1, $2, $3, $4, $5)")
+    )
+    .bind(machine_id).bind(type_name).bind(lot_name).bind(event_date).bind(event_type)
     .execute(&mut **tx).await?;
 
     Ok(())

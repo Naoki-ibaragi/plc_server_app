@@ -198,7 +198,15 @@ fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
                         None => continue,
                     };
                     regist_alarm_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
-                } else {
+                } else if key=="LOTSTART"{
+                    regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"LOT_START").await
+                } else if key=="START"{
+                    regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"START").await
+                } else if key=="STOP"{
+                    regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"STOP").await
+                } else if key=="LOTEND"{
+                    regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"LOT_END").await
+                }else {
                     continue;
                 };
 
