@@ -74,7 +74,7 @@ fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
                 request.plc_id,
                 request.message.len()
             );
-            log::info!("PLC data content: {}", request.message);
+            //log::info!("PLC data content: {}", request.message);
 
             // 接続プールから接続を取得
             let pool = {
@@ -148,7 +148,7 @@ fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
                     regist_arm1_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
                 } else if key.contains("_A1_") && key.contains("U1"){
                     //LDのアーム1にはwano,wax,way情報が入っているので分ける
-                    regist_ld_arm1_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
+                    regist_ld_arm1_info(&mut tx, machine_id, lot_name, type_name, value, &mut manage_ld_pickup_date).await
                 }else if key.contains("_A1_") && key.contains("U7"){
                     //ULDのアーム1でpx,py,ax,ay,at,pax,pay全て一気に登録する
                     regist_uld_arm1_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
@@ -198,13 +198,17 @@ fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
                         None => continue,
                     };
                     regist_alarm_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
-                } else if key=="LOTSTART"{
+                } else if key.contains("LOTSTART"){
                     regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"LOT_START").await
-                } else if key=="START"{
+                } else if key.contains("START") && !key.contains("LOTSTART"){
                     regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"START").await
-                } else if key=="STOP"{
-                    regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"STOP").await
-                } else if key=="LOTEND"{
+                } else if key.contains("AL_STOP"){
+                    regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"ALARM_STOP").await
+                } else if key.contains("LOCK_STOP"){
+                    regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"LOCK_STOP").await
+                } else if key.contains("NOLOCK_STOP"){
+                    regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"NO_LOCK_STOP").await
+                } else if key.contains("LOTEND"){
                     regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"LOT_END").await
                 }else {
                     continue;

@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS CHIPDATA (
 	uld_put_date		TIMESTAMP,
 	uld_chip_align_x	INTEGER,
 	uld_chip_align_y	INTEGER,
-	uld_chip_align_num	INTEGER,
+	uld_pf				VARCHAR,
 	uld_alarm			INTEGER,
 	PRIMARY KEY (lot_name, serial, ld_pickup_date, machine_id)
 ) PARTITION BY RANGE (ld_pickup_date);

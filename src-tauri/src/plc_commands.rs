@@ -154,6 +154,7 @@ async fn receive_data_from_plc(
                 // 受信したデータをUTF-8としてデコード
                 match std::str::from_utf8(&buffer[..n]) {
                     Ok(text) => {
+                        log::info!("raw_data from plc {} :{}",plc_id,text);
                         // 前回の未完了データと結合
                         incomplete_data.push_str(text);
 
