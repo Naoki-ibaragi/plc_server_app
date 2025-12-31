@@ -22,7 +22,7 @@ use tauri_plugin_single_instance::init as single_instance;
 use config::{init_socket, add_plc, edit_plc, delete_plc};
 use plc_commands::{connect_plc, disconnect_plc};
 use state::init_connection_state;
-use data_handler::init_database;
+use data_handler::{init_database, start_partition_check_task};
 
 fn main() {
     // 早期にログディレクトリを作成
@@ -73,6 +73,12 @@ fn main() {
 
             // DB チャネルを状態として管理
             app.manage(db_channel);
+
+            // パーティション確認タスクを起動（毎日7時に実行）
+            tauri::async_runtime::spawn(async {
+                start_partition_check_task().await;
+            });
+            log::info!("Partition check task initialized");
 
             // トレイアイコンをセットアップ
             tray::setup_tray_icon(app)?;

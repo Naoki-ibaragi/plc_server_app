@@ -124,7 +124,7 @@ fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
                 }
             };
 
-            // U1_TRを含むキーを優先的に処理（ld_pickup_dateの登録のため）
+            // 第1優先: U1_TRを処理（ld_pickup_dateの登録のため）
             for (key, value) in &recv_data {
                 if key.contains("U1_TR") {
                     let result = regist_u1_tr_info(&mut tx, machine_id, lot_name, type_name, value,&mut manage_ld_pickup_date).await;
@@ -134,9 +134,22 @@ fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
                 }
             }
 
-            // 各ユニット情報の取り出しと登録
+            // 第2優先: U1_A1を処理（ld_pickup_dateの登録のため - U1_TRがスキップされた場合のバックアップ）
+            for (key, value) in &recv_data {
+                if key.contains("_A1_") && key.contains("U1") {
+                    let result = regist_ld_arm1_info(&mut tx, machine_id, lot_name, type_name, value, &mut manage_ld_pickup_date).await;
+                    if let Err(e) = result {
+                        log::error!("Failed to register data for key '{}': {}", key, e);
+                    }
+                }
+            }
+
+            // 第3優先: その他のユニット情報の取り出しと登録
             for (key, value) in &recv_data {
                 let result = if key.contains("U1_TR") {
+                    // すでに処理済みなのでスキップ
+                    continue;
+                } else if key.contains("_A1_") && key.contains("U1"){
                     // すでに処理済みなのでスキップ
                     continue;
                 } else if key.contains("_A1_") && !key.contains("U1") && !key.contains("U7") && !key.contains("U2"){
@@ -146,10 +159,7 @@ fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
                         None => continue,
                     };
                     regist_arm1_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
-                } else if key.contains("_A1_") && key.contains("U1"){
-                    //LDのアーム1にはwano,wax,way情報が入っているので分ける
-                    regist_ld_arm1_info(&mut tx, machine_id, lot_name, type_name, value, &mut manage_ld_pickup_date).await
-                }else if key.contains("_A1_") && key.contains("U7"){
+                } else if key.contains("_A1_") && key.contains("U7"){
                     //ULDのアーム1でpx,py,ax,ay,at,pax,pay全て一気に登録する
                     regist_uld_arm1_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
                 }else if key.contains("_A1_") && key.contains("U2"){
@@ -348,6 +358,55 @@ pub fn save_plc_data(
     tx.send(request)
         .map_err(|e| format!("Failed to send to DB writer thread: {}", e))?;
     Ok(())
+}
+
+/// 定期的にパーティションを確認・作成するタスクを起動
+/// 毎日7時に現在月と次月のパーティションを確保する
+pub async fn start_partition_check_task() {
+    log::info!("Partition check task started");
+
+    loop {
+        // 次の7時までの時間を計算
+        use chrono::{Local, Timelike, Duration};
+        let now = Local::now();
+
+        // 今日の7時を取得
+        let today_7am = now
+            .date_naive()
+            .and_hms_opt(7, 0, 0)
+            .unwrap()
+            .and_local_timezone(Local)
+            .unwrap();
+
+        // 現在時刻が7時を過ぎている場合は明日の7時、そうでなければ今日の7時
+        let next_check_time = if now >= today_7am {
+            (now + Duration::days(1))
+                .date_naive()
+                .and_hms_opt(7, 0, 0)
+                .unwrap()
+                .and_local_timezone(Local)
+                .unwrap()
+        } else {
+            today_7am
+        };
+
+        let duration_until_check = (next_check_time - now).to_std().unwrap_or(std::time::Duration::from_secs(3600));
+
+        log::info!("Next partition check scheduled at {} (in {} hours)",
+            next_check_time.format("%Y-%m-%d %H:%M:%S"),
+            duration_until_check.as_secs() / 3600);
+
+        // 次の7時まで待機
+        tokio::time::sleep(duration_until_check).await;
+
+        // パーティションを確認・作成
+        log::info!("Running scheduled partition check");
+        if let Err(e) = ensure_current_partitions().await {
+            log::error!("Failed to ensure partitions in scheduled task: {}", e);
+        } else {
+            log::info!("Scheduled partition check completed successfully");
+        }
+    }
 }
 
 /// データベース接続プールをクローズする(アプリケーション終了時)
