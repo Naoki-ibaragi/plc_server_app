@@ -9,6 +9,7 @@ use std::env;
 use chrono::NaiveDateTime;
 
 use crate::regist_data_to_db::*;
+use crate::regist_data_to_db_2::*;
 
 lazy_static! {
     static ref DB_POOL: Mutex<Option<Pool<Postgres>>> = Mutex::new(None);
@@ -115,128 +116,256 @@ fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
                 .and_then(|v| v.as_i64())
                 .unwrap_or(0) as i32;
 
-            // トランザクション開始
-            let mut tx = match pool.begin().await {
-                Ok(transaction) => transaction,
-                Err(e) => {
-                    log::error!("Failed to begin transaction: {}", e);
-                    continue;
-                }
-            };
+            //machine_idによってregist_data_to_dbを使い分ける
 
-            // 第1優先: U1_TRを処理（ld_pickup_dateの登録のため）
-            for (key, value) in &recv_data {
-                if key.contains("U1_TR") {
-                    let result = regist_u1_tr_info(&mut tx, machine_id, lot_name, type_name, value,&mut manage_ld_pickup_date).await;
-                    if let Err(e) = result {
-                        log::error!("Failed to register data for key '{}': {}", key, e);
+            if machine_id<=4{ //通常装置用の処理
+                // トランザクション開始
+                let mut tx = match pool.begin().await {
+                    Ok(transaction) => transaction,
+                    Err(e) => {
+                        log::error!("Failed to begin transaction: {}", e);
+                        continue;
                     }
-                }
-            }
-
-            // 第2優先: U1_A1を処理（ld_pickup_dateの登録のため - U1_TRがスキップされた場合のバックアップ）
-            for (key, value) in &recv_data {
-                if key.contains("_A1_") && key.contains("U1") {
-                    let result = regist_ld_arm1_info(&mut tx, machine_id, lot_name, type_name, value, &mut manage_ld_pickup_date).await;
-                    if let Err(e) = result {
-                        log::error!("Failed to register data for key '{}': {}", key, e);
-                    }
-                }
-            }
-
-            // 第3優先: その他のユニット情報の取り出しと登録
-            for (key, value) in &recv_data {
-                let result = if key.contains("U1_TR") {
-                    // すでに処理済みなのでスキップ
-                    continue;
-                } else if key.contains("_A1_") && key.contains("U1"){
-                    // すでに処理済みなのでスキップ
-                    continue;
-                } else if key.contains("_A1_") && !key.contains("U1") && !key.contains("U7") && !key.contains("U2"){
-                    // 上流アームコレットの使用回数データを登録
-                    let unit_name = match key.split('_').next() {
-                        Some(v) => v,
-                        None => continue,
-                    };
-                    regist_arm1_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
-                } else if key.contains("_A1_") && key.contains("U7"){
-                    //ULDのアーム1でpx,py,ax,ay,at,pax,pay全て一気に登録する
-                    regist_uld_arm1_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
-                }else if key.contains("_A1_") && key.contains("U2"){
-                    //DC1のアーム1で予熱テーブルの補正量も登録するように変更
-                    regist_dc1_arm1_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
-                }else if key.contains("_A2_") {
-                    // 下流アームコレットの使用回数データを登録
-                    let unit_name = match key.split('_').next() {
-                        Some(v) => v,
-                        None => continue,
-                    };
-                    regist_arm2_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
-                } else if key.contains("_PH_") {
-                    // DC1,ULD予熱テーブルのデータを登録
-                    let unit_name = match key.split('_').next() {
-                        Some(v) => v,
-                        None => continue,
-                    };
-                    regist_ph_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
-                } else if key.contains("_TS_") && !key.contains("U6") {
-                    // DC1~DC2検査テーブルのデータを登録
-                    let unit_name = match key.split('_').next() {
-                        Some(v) => v,
-                        None => continue,
-                    };
-                    regist_ts_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
-                } else if key.contains("_TS_") && key.contains("U6") {
-                    // IP検査テーブルのデータを登録
-                    regist_ip_ts_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
-                } else if key.contains("U6_T1_") {
-                    // IP表面検査のBINデータを登録
-                    regist_ip_surf_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
-                } else if key.contains("U6_T2_") {
-                    // IP裏面検査のBINデータを登録
-                    regist_ip_back_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
-                } else if key.contains("U7_PI_") {
-                    // ULDポケット認識時のデータを登録
-                    regist_uld_pocket_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
-                } else if key.contains("U7_CI_") {
-                    // ULDポケット挿入時のデータを登録
-                    regist_uld_chip_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
-                } else if key.contains("_AL_") {
-                    // アラーム情報の登録
-                    let unit_name = match key.split('_').next() {
-                        Some(v) => v,
-                        None => continue,
-                    };
-                    regist_alarm_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
-                } else if key.contains("LOTSTART"){
-                    regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"LOT_START").await
-                } else if key.contains("START") && !key.contains("LOTSTART"){
-                    regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"START").await
-                } else if key.contains("AL_STOP"){
-                    regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"ALARM_STOP").await
-                } else if key.contains("LOCK_STOP"){
-                    regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"LOCK_STOP").await
-                } else if key.contains("NOLOCK_STOP"){
-                    regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"NO_LOCK_STOP").await
-                } else if key.contains("LOTEND"){
-                    regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"LOT_END").await
-                }else {
-                    continue;
                 };
 
-                if let Err(e) = result {
-                    log::error!("Failed to register data for key '{}': {}", key, e);
+                // 第1優先: U1_TRを処理（ld_pickup_dateの登録のため）
+                for (key, value) in &recv_data {
+                    if key.contains("U1_TR") {
+                        let result = regist_u1_tr_info(&mut tx, machine_id, lot_name, type_name, value,&mut manage_ld_pickup_date).await;
+                        if let Err(e) = result {
+                            log::error!("Failed to register data for key '{}': {}", key, e);
+                        }
+                    }
                 }
-            }
 
-            // トランザクションコミット
-            match tx.commit().await {
-                Ok(_) => {
-                    log::info!("DB write completed for PLC ID: {}", request.plc_id);
+                // 第2優先: U1_A1を処理（ld_pickup_dateの登録のため - U1_TRがスキップされた場合のバックアップ）
+                for (key, value) in &recv_data {
+                    if key.contains("_A1_") && key.contains("U1") {
+                        let result = regist_ld_arm1_info(&mut tx, machine_id, lot_name, type_name, value, &mut manage_ld_pickup_date).await;
+                        if let Err(e) = result {
+                            log::error!("Failed to register data for key '{}': {}", key, e);
+                        }
+                    }
                 }
-                Err(e) => {
-                    log::error!("Failed to commit transaction: {}", e);
+
+                // 第3優先: その他のユニット情報の取り出しと登録
+                for (key, value) in &recv_data {
+                    let result = if key.contains("U1_TR") {
+                        // すでに処理済みなのでスキップ
+                        continue;
+                    } else if key.contains("_A1_") && key.contains("U1"){
+                        // すでに処理済みなのでスキップ
+                        continue;
+                    } else if key.contains("_A1_") && !key.contains("U1") && !key.contains("U7") && !key.contains("U2"){
+                        // 上流アームコレットの使用回数データを登録
+                        let unit_name = match key.split('_').next() {
+                            Some(v) => v,
+                            None => continue,
+                        };
+                        regist_arm1_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
+                    } else if key.contains("_A1_") && key.contains("U7"){
+                        //ULDのアーム1でpx,py,ax,ay,at,pax,pay全て一気に登録する
+                        regist_uld_arm1_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
+                    }else if key.contains("_A1_") && key.contains("U2"){
+                        //DC1のアーム1で予熱テーブルの補正量も登録するように変更
+                        regist_dc1_arm1_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
+                    }else if key.contains("_A2_") {
+                        // 下流アームコレットの使用回数データを登録
+                        let unit_name = match key.split('_').next() {
+                            Some(v) => v,
+                            None => continue,
+                        };
+                        regist_arm2_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
+                    } else if key.contains("_PH_") {
+                        // DC1,ULD予熱テーブルのデータを登録
+                        let unit_name = match key.split('_').next() {
+                            Some(v) => v,
+                            None => continue,
+                        };
+                        regist_ph_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
+                    } else if key.contains("_TS_") && !key.contains("U6") {
+                        // DC1~DC2検査テーブルのデータを登録
+                        let unit_name = match key.split('_').next() {
+                            Some(v) => v,
+                            None => continue,
+                        };
+                        regist_ts_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
+                    } else if key.contains("_TS_") && key.contains("U6") {
+                        // IP検査テーブルのデータを登録
+                        regist_ip_ts_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
+                    } else if key.contains("U6_T1_") {
+                        // IP表面検査のBINデータを登録
+                        regist_ip_surf_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
+                    } else if key.contains("U6_T2_") {
+                        // IP裏面検査のBINデータを登録
+                        regist_ip_back_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
+                    } else if key.contains("U7_PI_") {
+                        // ULDポケット認識時のデータを登録
+                        regist_uld_pocket_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
+                    } else if key.contains("U7_CI_") {
+                        // ULDポケット挿入時のデータを登録
+                        regist_uld_chip_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
+                    } else if key.contains("_AL_") {
+                        // アラーム情報の登録
+                        let unit_name = match key.split('_').next() {
+                            Some(v) => v,
+                            None => continue,
+                        };
+                        regist_alarm_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
+                    } else if key.contains("LOTSTART"){
+                        regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"LOT_START").await
+                    } else if key.contains("START") && !key.contains("LOTSTART"){
+                        regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"START").await
+                    } else if key.contains("AL_STOP"){
+                        regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"ALARM_STOP").await
+                    } else if key.contains("LOCK_STOP"){
+                        regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"LOCK_STOP").await
+                    } else if key.contains("NOLOCK_STOP"){
+                        regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"NO_LOCK_STOP").await
+                    } else if key.contains("LOTEND"){
+                        regist_event_info(&mut tx,machine_id,lot_name,type_name,value,"LOT_END").await
+                    }else {
+                        continue;
+                    };
+
+                    if let Err(e) = result {
+                        log::error!("Failed to register data for key '{}': {}", key, e);
+                    }
                 }
+
+                // トランザクションコミット
+                match tx.commit().await {
+                    Ok(_) => {
+                        log::info!("DB write completed for PLC ID: {}", request.plc_id);
+                    }
+                    Err(e) => {
+                        log::error!("Failed to commit transaction: {}", e);
+                    }
+                }
+            }else{ //小型機の処理
+                // トランザクション開始
+                let mut tx = match pool.begin().await {
+                    Ok(transaction) => transaction,
+                    Err(e) => {
+                        log::error!("Failed to begin transaction: {}", e);
+                        continue;
+                    }
+                };
+
+                // 第1優先: U1_TRを処理（ld_pickup_dateの登録のため）
+                for (key, value) in &recv_data {
+                    if key.contains("U1_TR") {
+                        let result = regist2_u1_tr_info(&mut tx, machine_id, lot_name, type_name, value,&mut manage_ld_pickup_date).await;
+                        if let Err(e) = result {
+                            log::error!("Failed to register data for key '{}': {}", key, e);
+                        }
+                    }
+                }
+
+                // 第2優先: U1_A1を処理（ld_pickup_dateの登録のため - U1_TRがスキップされた場合のバックアップ）
+                for (key, value) in &recv_data {
+                    if key.contains("U1_A1_") {
+                        let result = regist2_ld_arm1_info(&mut tx, machine_id, lot_name, type_name, value, &mut manage_ld_pickup_date).await;
+                        if let Err(e) = result {
+                            log::error!("Failed to register data for key '{}': {}", key, e);
+                        }
+                    }
+                }
+
+                // 第3優先: その他のユニット情報の取り出しと登録
+                for (key, value) in &recv_data {
+                    let result = if key.contains("U1_TR") {
+                        // すでに処理済みなのでスキップ
+                        continue;
+                    } else if key.contains("U1_A1_"){
+                        // すでに処理済みなのでスキップ
+                        continue;
+                    } else if key.contains("_A1_") && !key.contains("U1") && !key.contains("U2"){
+                        // 上流アームコレットの使用回数データを登録(AC2)
+                        let unit_name = match key.split('_').next() {
+                            Some(v) => &(v.to_string()+"_A1"),
+                            None => continue,
+                        };
+                        regist2_arm1_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
+                    } else if key.contains("_A3_"){
+                        // 上流アームコレットの使用回数データを登録(AC1,DC2)
+                        let unit_name = match key.split('_').next() {
+                            Some(v) => &(v.to_string()+"_A3"),
+                            None => continue,
+                        };
+                        regist2_arm1_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
+                    }else if key.contains("U2_A1_"){
+                        //DC1のアーム1で予熱テーブルの補正量も登録するように変更
+                        regist2_dc1_arm1_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
+                    }else if key.contains("_A2_") {
+                        // 下流アームコレットの使用回数データを登録(DC1,AC2)
+                        let unit_name = match key.split('_').next() {
+                            Some(v) => &(v.to_string()+"_A2"),
+                            None => continue,
+                        };
+                        regist2_arm2_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
+                    }else if key.contains("_A4_") {
+                        // 下流アームコレットの使用回数データを登録(AC1,DC2)
+                        let unit_name = match key.split('_').next() {
+                            Some(v) => &(v.to_string()+"_A4"),
+                            None => continue,
+                        };
+                        regist2_arm2_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
+                    } else if key.contains("_TS_") {
+                        // DC1~DC2検査テーブルのデータを登録
+                        let unit_name = match key.split('_').next() {
+                            Some(v) => &(v.to_string()+"_TS"),
+                            None => continue,
+                        };
+                        regist2_ts_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
+                    } else if key.contains("U4_IP1_") {
+                        // IP表面検査のBINデータを登録
+                        regist2_ip_surf_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
+                    } else if key.contains("U4_IP2_") {
+                        // IP裏面検査のBINデータを登録
+                        regist2_ip_back_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
+                    } else if key.contains("U4_PI_") {
+                        // ULDポケット認識時のデータを登録
+                        regist2_uld_pocket_info(&mut tx, machine_id, lot_name, type_name, value, &manage_ld_pickup_date).await
+                    } else if key.contains("_AL_") {
+                        // アラーム情報の登録
+                        let unit_name = match key.split('_').next() {
+                            Some(v) => &(v.to_string()+"_AL"),
+                            None => continue,
+                        };
+                        regist2_alarm_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
+                    } else if key.contains("LOTSTART"){
+                        regist2_event_info(&mut tx,machine_id,lot_name,type_name,value,"LOT_START").await
+                    } else if key.contains("START") && !key.contains("LOTSTART"){
+                        regist2_event_info(&mut tx,machine_id,lot_name,type_name,value,"START").await
+                    } else if key.contains("AL_STOP"){
+                        regist2_event_info(&mut tx,machine_id,lot_name,type_name,value,"ALARM_STOP").await
+                    } else if key.contains("LOCK_STOP"){
+                        regist2_event_info(&mut tx,machine_id,lot_name,type_name,value,"LOCK_STOP").await
+                    } else if key.contains("NOLOCK_STOP"){
+                        regist2_event_info(&mut tx,machine_id,lot_name,type_name,value,"NO_LOCK_STOP").await
+                    } else if key.contains("LOTEND"){
+                        regist2_event_info(&mut tx,machine_id,lot_name,type_name,value,"LOT_END").await
+                    }else {
+                        continue;
+                    };
+
+                    if let Err(e) = result {
+                        log::error!("Failed to register data for key '{}': {}", key, e);
+                    }
+                }
+
+                // トランザクションコミット
+                match tx.commit().await {
+                    Ok(_) => {
+                        log::info!("DB write completed for PLC ID: {}", request.plc_id);
+                    }
+                    Err(e) => {
+                        log::error!("Failed to commit transaction: {}", e);
+                    }
+                }
+
+
             }
         }
 
@@ -323,6 +452,35 @@ pub async fn create_partition_for_month(year: i32, month: u32) -> Result<(), sql
     Ok(())
 }
 
+/// chipdata2テーブルの指定された年月のパーティションを作成する
+/// 例: 2025年1月 → chipdata2_2025_01
+pub async fn create_partition_for_month_chipdata2(year: i32, month: u32) -> Result<(), sqlx::Error> {
+    let pool = {
+        let db_pool = DB_POOL.lock();
+        db_pool.as_ref().map(|p| p.clone())
+    };
+
+    if let Some(pool) = pool {
+        let partition_name = format!("chipdata2_{}_{:02}", year, month);
+
+        // 次の月の開始日を計算
+        let next_month = if month == 12 { 1 } else { month + 1 };
+        let next_year = if month == 12 { year + 1 } else { year };
+
+        let sql = format!(
+            "CREATE TABLE IF NOT EXISTS {} PARTITION OF chipdata2 FOR VALUES FROM ('{}-{:02}-01') TO ('{}-{:02}-01')",
+            partition_name, year, month, next_year, next_month
+        );
+
+        sqlx::query(&sql)
+            .execute(&pool)
+            .await?;
+
+        log::info!("Partition '{}' created for {}/{}", partition_name, year, month);
+    }
+    Ok(())
+}
+
 /// 現在の年月と次月のパーティションを自動作成
 pub async fn ensure_current_partitions() -> Result<(), sqlx::Error> {
     use chrono::{Datelike, Local};
@@ -331,13 +489,15 @@ pub async fn ensure_current_partitions() -> Result<(), sqlx::Error> {
     let current_year = now.year();
     let current_month = now.month();
 
-    // 現在の月のパーティション作成
+    // 現在の月のパーティション作成（chipdataとchipdata2両方）
     create_partition_for_month(current_year, current_month).await?;
+    create_partition_for_month_chipdata2(current_year, current_month).await?;
 
     // 次月のパーティション作成（月末の書き込みエラーを防ぐ）
     let next_month = if current_month == 12 { 1 } else { current_month + 1 };
     let next_year = if current_month == 12 { current_year + 1 } else { current_year };
     create_partition_for_month(next_year, next_month).await?;
+    create_partition_for_month_chipdata2(next_year, next_month).await?;
 
     Ok(())
 }

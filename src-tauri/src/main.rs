@@ -9,6 +9,7 @@ mod plc_commands;
 mod tray;
 mod data_handler;
 mod regist_data_to_db;
+mod regist_data_to_db_2;
 
 use tauri::{
     Manager,
