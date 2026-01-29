@@ -311,10 +311,17 @@ fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
                             None => continue,
                         };
                         regist2_arm2_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
-                    } else if key.contains("_TS_") {
+                    } else if key.contains("_TS1_") {
                         // DC1~DC2検査テーブルのデータを登録
                         let unit_name = match key.split('_').next() {
-                            Some(v) => &(v.to_string()+"_TS"),
+                            Some(v) => &(v.to_string()+"_TS1"),
+                            None => continue,
+                        };
+                        regist2_ts_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
+                    } else if key.contains("_TS2_") {
+                        // DC1~DC2検査テーブルのデータを登録
+                        let unit_name = match key.split('_').next() {
+                            Some(v) => &(v.to_string()+"_TS2"),
                             None => continue,
                         };
                         regist2_ts_info(&mut tx, machine_id, lot_name, type_name, unit_name, value, &manage_ld_pickup_date).await
@@ -340,10 +347,10 @@ fn start_db_writer_thread() -> mpsc::UnboundedSender<DbWriteRequest> {
                         regist2_event_info(&mut tx,machine_id,lot_name,type_name,value,"START").await
                     } else if key.contains("AL_STOP"){
                         regist2_event_info(&mut tx,machine_id,lot_name,type_name,value,"ALARM_STOP").await
-                    } else if key.contains("LOCK_STOP"){
-                        regist2_event_info(&mut tx,machine_id,lot_name,type_name,value,"LOCK_STOP").await
                     } else if key.contains("NOLOCK_STOP"){
                         regist2_event_info(&mut tx,machine_id,lot_name,type_name,value,"NO_LOCK_STOP").await
+                    } else if key.contains("LOCK_STOP"){
+                        regist2_event_info(&mut tx,machine_id,lot_name,type_name,value,"LOCK_STOP").await
                     } else if key.contains("LOTEND"){
                         regist2_event_info(&mut tx,machine_id,lot_name,type_name,value,"LOT_END").await
                     }else {

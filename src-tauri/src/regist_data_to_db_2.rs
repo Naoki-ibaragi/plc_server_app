@@ -376,15 +376,15 @@ pub async fn regist2_ts_info(
     sqlx::query(&format!(
         "INSERT INTO chipdata2 (machine_id, type_name, lot_name, serial, ld_pickup_date,
          {0}_stage_serial, {0}_stage_count, {0}_probe_serial, {0}_probe_count,
-         {0}_probe_x, {0}_probe_y, {0}_probe_t,
+         {0}_probe_align_x, {0}_probe_align_y, {0}_probe_align_t,
          {0}_stage_z, {0}_pin_z, {0}_chip_align_x, {0}_chip_align_y,
          {0}_chip_align_t, {0}_test_bin)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
          ON CONFLICT(lot_name, serial, ld_pickup_date, machine_id)
          DO UPDATE SET
          {0}_stage_serial = EXCLUDED.{0}_stage_serial, {0}_stage_count = EXCLUDED.{0}_stage_count,
          {0}_probe_serial = EXCLUDED.{0}_probe_serial, {0}_probe_count = EXCLUDED.{0}_probe_count,
-         {0}_probe_x = EXCLUDED.{0}_probe_x, {0}_probe_y = EXCLUDED.{0}_probe_y,{0}_probe_t = EXCLUDED.{0}_probe_t,
+         {0}_probe_align_x = EXCLUDED.{0}_probe_align_x, {0}_probe_align_y = EXCLUDED.{0}_probe_align_y,{0}_probe_align_t = EXCLUDED.{0}_probe_align_t,
          {0}_stage_z = EXCLUDED.{0}_stage_z, {0}_pin_z = EXCLUDED.{0}_pin_z,
          {0}_chip_align_x = EXCLUDED.{0}_chip_align_x, {0}_chip_align_y = EXCLUDED.{0}_chip_align_y,
          {0}_chip_align_t = EXCLUDED.{0}_chip_align_t, {0}_test_bin = EXCLUDED.{0}_test_bin",
@@ -439,9 +439,9 @@ pub async fn regist2_ip_surf_info(
          ON CONFLICT(lot_name, serial, ld_pickup_date, machine_id)
          DO UPDATE SET 
          ip_surf_bin = EXCLUDED.ip_surf_bin,
-         uld_pre_align_x = EXCLUDED.uld_pre_aign_x,
-         uld_pre_align_y = EXCLUDED.uld_pre_aign_y,
-         uld_pre_align_t = EXCLUDED.uld_pre_aign_t,
+         uld_pre_align_x = EXCLUDED.uld_pre_align_x,
+         uld_pre_align_y = EXCLUDED.uld_pre_align_y,
+         uld_pre_align_t = EXCLUDED.uld_pre_align_t,
          ip_stage_count = EXCLUDED.ip_stage_count,
          uld_arm1_collet = EXCLUDED.uld_arm1_collet"
     )
@@ -488,7 +488,7 @@ pub async fn regist2_ip_back_info(
     sqlx::query(
         "INSERT INTO chipdata2 (machine_id, type_name, lot_name, serial, ld_pickup_date, ip_back_bin,
         uld_pf, uld_pocket_x, uld_pocket_y, uld_pocket_align_x, uld_pocket_align_y)
-         VALUES ($1, $2, $3, $4, $5, $6)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          ON CONFLICT(lot_name, serial, ld_pickup_date, machine_id)
          DO UPDATE SET 
          ip_back_bin = EXCLUDED.ip_back_bin,
@@ -519,8 +519,6 @@ pub async fn regist2_uld_pocket_info(
     let cax = hash_map.get("cax").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
     let cay = hash_map.get("cay").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
     let trayid = hash_map.get("trayid").and_then(|v| v.as_str()).unwrap_or("unknown");
-    let px = hash_map.get("px").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-    let py = hash_map.get("py").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
     let date_str = hash_map.get("date").and_then(|v| v.as_str()).unwrap_or("1970-01-01 00:00:00");
 
     // TIMESTAMP型: YYYY-MM-DD hh:mm:ss形式をそのまま使用
@@ -545,15 +543,15 @@ pub async fn regist2_uld_pocket_info(
 
     sqlx::query(
         "INSERT INTO chipdata2 (machine_id, type_name, lot_name, serial, ld_pickup_date,
-         uld_trayid,uld_pocket_x, uld_pocket_y, uld_pocket_align_x, uld_pocket_align_y, uld_put_date)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         uld_trayid,uld_chip_align_x, uld_chip_align_y, uld_put_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT(lot_name, serial, ld_pickup_date, machine_id)
          DO UPDATE SET
-         uld_trayid = EXCLUDED.uld_trayid, uld_pocket_x = EXCLUDED.uld_pocket_x, uld_pocket_y = EXCLUDED.uld_pocket_y,
+         uld_trayid = EXCLUDED.uld_trayid,
          uld_chip_align_x = EXCLUDED.uld_chip_align_x, uld_chip_align_y = EXCLUDED.uld_chip_align_y, uld_put_date=EXCLUDED.uld_put_date"
     )
     .bind(machine_id).bind(type_name).bind(lot_name).bind(serial).bind(ld_pickup_date)
-    .bind(trayid).bind(px).bind(py).bind(cax).bind(cay).bind(uld_put_date)
+    .bind(trayid).bind(cax).bind(cay).bind(uld_put_date)
     .execute(&mut **tx).await?;
 
     Ok(())

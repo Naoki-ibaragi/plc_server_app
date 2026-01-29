@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "plc_server_app",
+  "productName": "plc_server_app_2",
   "version": "0.1.0",
-  "identifier": "com.plc-server-app.dev",
+  "identifier": "com.plc-server-app2.dev",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "plc_server_app",
+        "title": "plc_server_app2",
         "width": 800,
         "height": 600,
         "resizable": true,
